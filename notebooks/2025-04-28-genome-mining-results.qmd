@@ -1,0 +1,87 @@
+---
+title: "Mining Bioactive Molecules from Fermented Food Bacterial Genomes"
+format:
+  html:
+    theme: default
+    toc: true
+editor: visual
+---
+
+This report summarizes results from mining bacterial genome datasets sourced from various fermented foods, including \~200 isolates from the BacDive database and \~11,500 metagenome-assembled genomes (MAGs) from multiple metagenomic studies of fermented foods. We used the [bacMAGmining](https://github.com/elizabethmcd/bacMAGmining) Nextflow workflow to predict various molecule types from these genomes, including small ORF (smORF) peptides, cleavage peptides, and biosynthetic gene clusters.
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(RColorBrewer)
+library(kableExtra)
+
+source("../scripts/mag-mining-notebook-functions.R")
+
+# metadata
+bacdive_metadata <- read_tsv("../metadata/2024-12-06-bacdive-accessions-curated-metadata.tsv") %>% 
+  mutate(genome_name = genbank_accession) %>% 
+  select(-genbank_accession) %>% 
+  select(genome_name, everything()) %>% 
+  filter(!is.na(substrate_category))
+
+mag_metadata <- read.csv("../metadata/Food_MAGs_curated_metadata_250421_corrected_merged_final_v2_corrected.csv") %>% 
+  mutate(genome_name = mag_id) %>% 
+  select(-mag_id) %>% 
+  select(genome_name, everything())
+
+# molecule count results
+bacdive_molecule_counts <- read_tsv("../results/2025-02-24-bacdive-results/all_molecule_counts.tsv")
+
+mag_molecule_counts <- read_tsv("../results/2025-04-24-mag-results/all_molecule_counts.tsv")
+
+# combine results with metadata
+bacdive_molecule_counts_metadata <- left_join(bacdive_molecule_counts, bacdive_metadata) %>% 
+  select(-bgc_bacteriocin)
+mag_molecule_counts_metadata <- left_join(mag_molecule_counts, mag_metadata) %>% 
+  select(-bgc_bacteriocin)
+```
+## BacDive Isolates Stats and Summaries
+
+Below we summarize statistics for the \~200 BacDive isolate genomes that are within major categories of fermented foods.
+The first table shows stats of genome quality across the major substrate categories, along with the total counts of each molecule category including smORFs, cleavage peptides (including propeptides), and total amount of BGCs predicted by antiSMASH. The plot then shows the distribution of genomes with quality characteristics - completeness vs contamination and size in number of contigs of the genome. 
+
+```{r bacdive_stats_summaries, echo=FALSE, warning=FALSE, message=FALSE, fig.width=10, fig.height=6}
+
+bacdive_stats <- generate_summary_stats(bacdive_molecule_counts_metadata, category_col = "substrate_category")
+
+bacdive_stats %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE) %>% 
+  row_spec(0, bold = TRUE)
+
+# Combine colors from multiple palettes
+custom_colors <- c(
+  brewer.pal(8, "Set2"),
+  brewer.pal(6, "Dark2")
+)
+
+bacdive_molecule_counts_metadata %>% 
+  ggplot(aes(x=completeness, y=contamination, size=contigs)) +
+  geom_point(aes(color=substrate_category)) +
+  theme_classic() +
+  theme(legend.position = "right") + 
+  scale_color_manual(values = custom_colors) +
+  ggtitle("Genome Quality Statistics of ~200 BacDive Isolate Genomes from Fermented Foods")
+
+plot_molecule_distribution(bacdive_molecule_counts_metadata, category_col="substrate_category", include_peptides = FALSE)
+
+```
+
+## MAG Stats and Summaries
+The below table and plots are the same representations above, but for the ~11,500 bacterial MAGs assembled from various fermented food metagenomes. 
+
+```{r mag_stats_summaries, echo=FALSE, warning=FALSE, message=FALSE, fig.width=10, fig.height=6}
+mag_stats <- generate_summary_stats(mag_molecule_counts_metadata, category_col="substrate_category")
+
+format_summary_table(mag_stats)
+
+plot_molecule_distribution(mag_molecule_counts_metadata, include_peptides=FALSE)
+```
+
+
+
