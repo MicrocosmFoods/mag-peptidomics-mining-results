@@ -1,3 +1,5 @@
+.RData
+.Rhistory
 results/2025-04-24-mag-results/2025-04-24-mag-bioactivity-all-peptides-predictions.tsv
 raw_data/
 *.Rproj
