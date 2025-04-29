@@ -33,6 +33,8 @@ ul.task-list li input[type="checkbox"] {
 <script src="2025-04-28-bioactivity-results_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="2025-04-28-bioactivity-results_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="2025-04-28-bioactivity-results_files/libs/bootstrap/bootstrap-c0367b04c37547644fece4185067e4a7.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="2025-04-28-bioactivity-results_files/libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="2025-04-28-bioactivity-results_files/libs/lightable-0.0.1/lightable.css" rel="stylesheet">
 
 
 </head>
@@ -45,7 +47,10 @@ ul.task-list li input[type="checkbox"] {
     <h2 id="toc-title">Table of contents</h2>
    
   <ul>
-  <li><a href="#dataset-sources-and-statistics" id="toc-dataset-sources-and-statistics" class="nav-link active" data-scroll-target="#dataset-sources-and-statistics">Dataset Sources and Statistics</a></li>
+  <li><a href="#dataset-sources-and-statistics" id="toc-dataset-sources-and-statistics" class="nav-link active" data-scroll-target="#dataset-sources-and-statistics">Dataset Sources and Statistics</a>
+  <ul class="collapse">
+  <li><a href="#summary-statistics-of-peptides-from-proteomics-experiments" id="toc-summary-statistics-of-peptides-from-proteomics-experiments" class="nav-link" data-scroll-target="#summary-statistics-of-peptides-from-proteomics-experiments">Summary Statistics of Peptides from Proteomics Experiments</a></li>
+  </ul></li>
   <li><a href="#bioactivity-categories" id="toc-bioactivity-categories" class="nav-link" data-scroll-target="#bioactivity-categories">Bioactivity Categories</a></li>
   </ul>
 </nav>
@@ -81,6 +86,46 @@ ul.task-list li input[type="checkbox"] {
 <li>~200 Bacterial Isolates from the BacDive database collected from various fermented foods</li>
 <li>~5,000 bacterial metagenome-assembled genomes (MAGs)</li>
 </ol>
+<section id="summary-statistics-of-peptides-from-proteomics-experiments" class="level3">
+<h3 class="anchored" data-anchor-id="summary-statistics-of-peptides-from-proteomics-experiments">Summary Statistics of Peptides from Proteomics Experiments</h3>
+<p>For each proteomics experiment, the total number of peptides collected from that experiment, the number of non-toxic peptides (peptides with a TOX probability of &gt; 0.5), the count of peptides with at least one highly confident bioactivity assignment (with probability = 1), the most confident bioactivity label among those peptides, and the count of peptides with the most common bioactivity label.</p>
+<div class="cell">
+<div class="cell-output-display">
+<table class="table table-striped table-hover caption-top table-sm small" data-quarto-postprocess="true">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th" style="text-align: left; font-weight: bold;">substrate_category</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">total_peptides</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">non_toxic_peptides</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">confident_bioactivity_count</th>
+<th data-quarto-table-cell-role="th" style="text-align: left; font-weight: bold;">most_common_bioactivity</th>
+<th data-quarto-table-cell-role="th" style="text-align: right; font-weight: bold;">most_common_bioactivity_count</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">milk</td>
+<td style="text-align: right;">102303</td>
+<td style="text-align: right;">37273</td>
+<td style="text-align: right;">34553</td>
+<td style="text-align: left;">AOX</td>
+<td style="text-align: right;">26957</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cocoa_beans</td>
+<td style="text-align: right;">12022</td>
+<td style="text-align: right;">3192</td>
+<td style="text-align: right;">3120</td>
+<td style="text-align: left;">Neuro</td>
+<td style="text-align: right;">2570</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+</section>
 </section>
 <section id="bioactivity-categories" class="level2">
 <h2 class="anchored" data-anchor-id="bioactivity-categories">Bioactivity Categories</h2>

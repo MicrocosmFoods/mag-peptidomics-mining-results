@@ -38,9 +38,10 @@ proteomics_bioactivity_results <- read_tsv("../results/2025-02-20-proteomics-bio
 proteomics_sample_metadata <- read.csv("../metadata/ff-proteomics-sample-metadata.csv")
 
 proteomics_bioactivity_metadata <- left_join(proteomics_bioactivity_results, proteomics_sample_metadata) %>% 
-  select(sample_code, study, fermented_food, substrate, category, everything())
+  mutate(substrate_category = substrate) %>% 
+  select(sample_code, peptide_id, study, fermented_food, substrate_category, category, everything())
 
-proteomics_bioactivity_df <- process_peptide_bioactivity_info(proteomics_sample_metadata)
+proteomics_bioactivity_df <- prepare_bioactivity_analysis(proteomics_bioactivity_metadata)
 
 # bacdive results and metadata
 bacdive_bioactivity_results <- read_tsv("../results/2025-02-24-bacdive-results/2025-02-24-all-peptides-predictions.tsv") %>% 
@@ -63,6 +64,8 @@ bacdive_ripp_results <- "../results/2025-02-24-bacdive-results/antismash_peptide
 
 bacdive_bioactivity_info_metadata <- process_peptide_bioactivity_info(bacdive_bioactivity_metadata, bacdive_deeppeptide_results, bacdive_smorfinder_results, bacdive_ripp_results)
 
+bacdive_bioactivity_df <- prepare_bioactivity_analysis(bacdive_bioactivity_info_metadata)
+
 # mag results and metadata
 mag_bioactivity_results <- read_tsv("../results/2025-04-24-mag-results/2025-04-24-mag-bioactivity-all-peptides-predictions.tsv") %>% 
   mutate(mag_id = str_extract(peptide_id,  "^.*?(?=_id_)"))
@@ -81,8 +84,20 @@ mag_smorfinder_results <- "../results/2025-04-24-mag-results/all_smorfinder_resu
 mag_ripp_results <- "../results/2025-04-24-mag-results/antismash_peptides.tsv"
 
 mag_bioactivity_info_metadata <- process_peptide_bioactivity_info(mag_bioactivity_metadata, mag_deeppeptide_results, mag_smorfinder_results, mag_ripp_results)
+
+mag_bioactivity_df <- prepare_bioactivity_analysis(mag_bioactivity_info_metadata)
 ```
 
+### Summary Statistics of Peptides from Proteomics Experiments
+
+For each proteomics experiment, the total number of peptides collected from that experiment, the number of non-toxic peptides (peptides with a TOX probability of \> 0.5), the count of peptides with at least one highly confident bioactivity assignment (with probability = 1), the most confident bioactivity label among those peptides, and the count of peptides with the most common bioactivity label.
+
+```{r proteomics_count_summaries, echo=FALSE, warning=FALSE, message=FALSE}
+
+proteomics_summary_stats <- generate_bioactivity_summary(proteomics_bioactivity_df)
+format_summary_table(proteomics_summary_stats)
+
+```
 
 
 
