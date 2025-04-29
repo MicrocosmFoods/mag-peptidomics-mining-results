@@ -202,12 +202,12 @@ format_summary_table <- function(summary_data) {
 #' @param smorfinder_results Path to SMORFinder results file
 #' @param ripp_results Path to RiPP results file
 #' @return A dataframe with peptide bioactivity data and peptide types
-process_peptide_bioactivity <- function(bioactivity_results, 
+process_peptide_bioactivity_info <- function(bioactivity_results, 
                                         deeppeptide_results = NULL, 
                                         smorfinder_results = NULL, 
                                         ripp_results = NULL) {
   # Read bioactivity results
-  bioactivity_data <- read_tsv(bioactivity_results)
+  bioactivity_data <- bioactivity_results
   
   # Process peptide type information if provided
   if (!is.null(deeppeptide_results) && !is.null(smorfinder_results) && !is.null(ripp_results)) {
@@ -241,7 +241,7 @@ process_peptide_bioactivity <- function(bioactivity_results,
   return(bioactivity_data)
 }
 
-#' Prepare bioactivity data for analysis
+#' Prepare bioactivity data for analysis, remove toxic peptide predictions from dataset
 #' 
 #' @param bioactivity_data Bioactivity data from process_peptide_bioactivity
 #' @param id_column Column name containing identifiers

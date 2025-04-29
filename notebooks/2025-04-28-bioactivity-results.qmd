@@ -1,0 +1,112 @@
+---
+title: "Predicted Bioactivity of Peptides from Diverse Fermented Foods"
+format:
+  html:
+    theme: default
+    toc: true
+editor: visual
+---
+
+This report summarizes results of predicted bioactivity of peptides from diverse fermented foods datasets. The peptides were predicted either using the [bacMAGmining](https://github.com/elizabethmcd/bacMAGmining) workflow for predicting small ORF (smORF) peptides, cleavage peptides, and leader sequences of RiPP peptides or directly from peptidomics experiments. Bioactivity and peptide characteristics such as physicochemical characteristics, signal peptide signatures, and sequence comparison to known peptide databases was performing using the [peptide-bioactivity-prediction](https://github.com/elizabethmcd/peptide-bioactivity-prediction) workflow.
+
+**Bioactivity label abbreviations are described below, [click here](#bioactivity-categories) to view them or the Bioactivity Categories tab on the right-hand side.**
+
+## Dataset Sources and Statistics
+
+The set of peptides were predicted or collected from three main sources, each comprising multiple studies of different fermented foods:
+
+1.  5 Peptidomics Studies of Fermented Foods
+2.  \~200 Bacterial Isolates from the BacDive database collected from various fermented foods
+3.  \~5,000 bacterial metagenome-assembled genomes (MAGs)
+
+```{r setup, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(RColorBrewer)
+library(kableExtra)
+library(UpSetR)
+library(DT)
+
+source("../scripts/mag-mining-notebook-functions.R")
+
+# read in all results files and metadata
+
+# proteomics results and metadata
+proteomics_bioactivity_results <- read_tsv("../results/2025-02-20-proteomics-bioactivity-results/all_peptides_predictions.tsv") %>% 
+  mutate(sample_code = str_extract(peptide_id, ".*(?=_peptides?)" )) %>%
+  select(sample_code, everything())
+
+proteomics_sample_metadata <- read.csv("../metadata/ff-proteomics-sample-metadata.csv")
+
+proteomics_bioactivity_metadata <- left_join(proteomics_bioactivity_results, proteomics_sample_metadata) %>% 
+  select(sample_code, study, fermented_food, substrate, category, everything())
+
+proteomics_bioactivity_df <- process_peptide_bioactivity_info(proteomics_sample_metadata)
+
+# bacdive results and metadata
+bacdive_bioactivity_results <- read_tsv("../results/2025-02-24-bacdive-results/2025-02-24-all-peptides-predictions.tsv") %>% 
+  mutate(genbank_accession = str_extract(peptide_id,  "^.*?(?=_id_)")) %>% 
+  select(genbank_accession, everything())
+
+bacdive_metadata <- read_tsv("../metadata/2024-12-06-bacdive-accessions-curated-metadata.tsv") %>% 
+    mutate(substrate_category = ifelse(substrate_category == "grain", "grains", substrate_category))
+
+bacdive_bioactivity_metadata <- left_join(bacdive_bioactivity_results, bacdive_metadata) %>%
+  filter(!is.na(substrate_category)) %>% 
+  distinct(peptide_id, .keep_all = TRUE) %>% 
+  mutate(genome_name = genbank_accession) %>% 
+  select(-genbank_accession) %>% 
+  select(genome_name, everything())
+
+bacdive_deeppeptide_results <- "../results/2025-02-24-bacdive-results/all_deeppeptide_results.tsv"
+bacdive_smorfinder_results <- "../results/2025-02-24-bacdive-results/all_smorfinder_results.tsv"
+bacdive_ripp_results <- "../results/2025-02-24-bacdive-results/antismash_peptides.tsv"
+
+bacdive_bioactivity_info_metadata <- process_peptide_bioactivity_info(bacdive_bioactivity_metadata, bacdive_deeppeptide_results, bacdive_smorfinder_results, bacdive_ripp_results)
+
+# mag results and metadata
+mag_bioactivity_results <- read_tsv("../results/2025-04-24-mag-results/2025-04-24-mag-bioactivity-all-peptides-predictions.tsv") %>% 
+  mutate(mag_id = str_extract(peptide_id,  "^.*?(?=_id_)"))
+
+mag_metadata <- read.csv("../metadata/Food_MAGs_curated_metadata_250421_corrected_merged_final_v2_corrected.csv")
+
+mag_bioactivity_metadata <- left_join(mag_bioactivity_results, mag_metadata) %>%
+  filter(!is.na(substrate_category)) %>% 
+  distinct(peptide_id, .keep_all = TRUE) %>% 
+  mutate(genome_name = mag_id) %>% 
+  select(-mag_id) %>% 
+  select(genome_name, everything())
+
+mag_deeppeptide_results <- "../results/2025-04-24-mag-results/all_deeppeptide_results.tsv"
+mag_smorfinder_results <- "../results/2025-04-24-mag-results/all_smorfinder_results.tsv"
+mag_ripp_results <- "../results/2025-04-24-mag-results/antismash_peptides.tsv"
+
+mag_bioactivity_info_metadata <- process_peptide_bioactivity_info(mag_bioactivity_metadata, mag_deeppeptide_results, mag_smorfinder_results, mag_ripp_results)
+```
+
+
+
+
+## Bioactivity Categories {#bioactivity-categories}
+
+The abbreviations for bioactivity are:
+
+-   AB: Antibacterial
+-   ACE: ACE inhibitor
+-   ACP: Anticancer
+-   AF: Antifungal
+-   AMAP: Antimalarial
+-   AMP: Antimicrobial
+-   AOX: Antioxidant
+-   APP: Antiparasitic
+-   AV: Antiviral
+-   BBB: Brain-blood barrier crossing
+-   DPPIV: DPPIV inhibitor - also know as gliptins, are a class of anti-hyperglycemic medications for managing diabetes, acts on incretin hormones namely GLP-1 and gastric inhibitory peptide (GIP) that maintain glucose homeostasis by increasing insulin secretion and decreasing glucagon secretion.
+-   MRSA: Anti-MRSA
+-   NP: Neuropeptide
+-   QS: Quorum sensing
+-   TOX: Toxic
+-   TTCA: Tumor T-cell antigens
+-   IMM: Immunomodulatory - this model I manually made with sequences labelled as "immunomodulatory" in Peptipedia.
+-   ANIF: Anti-inflammatory - this model I manually made with sequences labelled as "antiinflammatory" in Peptipedia. I attempted to make a classification model using benchmark anti-inflammatory datasets of positive/negative examples, but they performed a lot worse than this one as the amount of sequences available were quite low I think.
+
+Besides the IMM and ANIF models, all models were provided through the AutoPeptideML distribution using benchmark datasets they collected.
