@@ -179,9 +179,24 @@ The table below gives summaries for each peptipedia ID in the database that had 
 
 proteomics_peptipedia_hits <- process_peptipedia_hits(proteomics_bioactivity_metadata, peptipedia_metadata)
 
-format_summary_table(proteomics_peptipedia_hits[["stats_summary"]])
+format_peptipedia_table(proteomics_peptipedia_hits[["stats_summary"]])
 
 ```
+
+### Comparisons of Peptides from MAGs to Peptipedia Database Sequences
+
+Now we'll compare the BLASTp results of peptipedia database sequences to the peptides predicted from MAGs since there were a much larger number of genomes/peptides to work with compared to the BacDive database. 
+
+Most of these bioactivities listed for each Peptipedia database hit are "predicted" in that they were predicted by the Peptipedia ML models for that bioactivity, with very little coming from experimental evidence. 
+
+```{r, mag_peptipedia_comps, echo=FALSE, message=FALSE, warning=FALSE}
+
+mag_peptipedia_hits <- process_peptipedia_hits(mag_bioactivity_metadata, peptipedia_metadata)
+
+format_peptipedia_table(mag_peptipedia_hits[["stats_summary"]])
+
+```
+
 
 
 ## Bioactivity Categories {#bioactivity-categories}
