@@ -41,7 +41,7 @@ proteomics_bioactivity_metadata <- left_join(proteomics_bioactivity_results, pro
   mutate(substrate_category = substrate) %>% 
   select(sample_code, peptide_id, study, fermented_food, substrate_category, category, everything())
 
-proteomics_bioactivity_df <- prepare_bioactivity_analysis(proteomics_bioactivity_metadata)
+proteomics_bioactivity_df <- prepare_bioactivity_analysis(proteomics_bioactivity_metadata, category_column = "fermented_food")
 
 # bacdive results and metadata
 bacdive_bioactivity_results <- read_tsv("../results/2025-02-24-bacdive-results/2025-02-24-all-peptides-predictions.tsv") %>% 
@@ -86,6 +86,14 @@ mag_ripp_results <- "../results/2025-04-24-mag-results/antismash_peptides.tsv"
 mag_bioactivity_info_metadata <- process_peptide_bioactivity_info(mag_bioactivity_metadata, mag_deeppeptide_results, mag_smorfinder_results, mag_ripp_results)
 
 mag_bioactivity_df <- prepare_bioactivity_analysis(mag_bioactivity_info_metadata)
+
+# peptipedia metadata
+peptipedia_metadata <- read_tsv("../metadata/2024-11-04-peptipedia-metadata.tsv") %>% 
+  mutate(peptipedia_peptide_id = peptide_id) %>% 
+  mutate(peptipedia_peptide_seq = sequence) %>% 
+  select(-peptide_id, -sequence) %>% 
+  select(peptipedia_peptide_id, peptipedia_peptide_seq, everything())
+
 ```
 
 ### Summary Statistics of Peptides from Proteomics Experiments
@@ -94,11 +102,86 @@ For each proteomics experiment, the total number of peptides collected from that
 
 ```{r proteomics_count_summaries, echo=FALSE, warning=FALSE, message=FALSE}
 
-proteomics_summary_stats <- generate_bioactivity_summary(proteomics_bioactivity_df)
+proteomics_summary_stats <- generate_bioactivity_summary(proteomics_bioactivity_df, category_column="fermented_food")
 format_summary_table(proteomics_summary_stats)
 
 ```
 
+### Summary Statistics of Peptides from BacDive Isolate Genomes
+
+Statistics below for the \~200 BacDive isolate genomes are the same as calculated for the proteomics experiment, except they are given at substrate-level categories for groups of genomes, and also give the counts of genomes in that group. For the summaries of different molecule counts from the output of the bacMAGmining workflow we included counts of propeptides predicted by DeepPeptide. For all bioactivity results and summaries below we remove propeptides predicted by DeepPeptide since one they are cleaved from the precursor protein they don't have independent function of their own.
+
+```{r bacdive_count_summaries, echo=FALSE, warning=FALSE, message=FALSE}
+
+bacdive_summary_stats <- generate_bioactivity_summary(bacdive_bioactivity_df)
+format_summary_table(bacdive_summary_stats)
+
+```
+
+### Summary Statistics of Peptides from MAGs
+
+Statistics below for the \~11,500 bacterial MAGs, which are the same as calculated for the above proteomics experiment and BacDive isolate genome peptides. These stats are also given at the substrate-level categories for groups of genomes, and also give the counts of genomes for that group, since there are too many categories at the individual fermented food level for this dataset. For the summaries of different molecule counts from the output of the bacMAGmining workflow we included counts of propeptides predicted by DeepPeptide. For all bioactivity results and summaries below we remove propeptides predicted by DeepPeptide since one they are cleaved from the precursor protein they don't have independent function of their own.
+
+```{r mag_count_summaries, echo=FALSE, warning=FALSE, message=FALSE}
+
+mag_summary_stats <- generate_bioactivity_summary(mag_bioactivity_df)
+format_summary_table(mag_summary_stats)
+```
+
+## Bioactivity Summaries
+
+Here I'm going to analyze the counts of different bioactivity labels separately for the the different datasets, mostly because the amounts of peptides between the dataset sources drastically differ as well as the way the substrate labels are assigned in the metadata. Here I'm first interested in the number of absolute peptides per sample that have a confident (probability \> 0.75) likelihood of that bioactivity as predicted with that particular machine learning classification model. This is after filtering out peptides that have a greater than 0.5 probability of being toxic.
+
+```{r proteomics_bioactivity_labels, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
+
+plot_bioactivity_distribution(proteomics_bioactivity_df[["filtered_bioactivity_df"]], category_column="fermented_food")
+
+```
+
+Bioactivity categories of interest that have high absolute counts are ACE inhibitors, anti-inflammatory, anti-oxidant, anti-viral, and DDPIV inhibitors (which help increase levels of GLP-1 and GIP hormones to stimulate insulin release and lower blood sugar levels).
+
+For absolute counts of bioactivity labels of peptides from the \~200 BacDive isolates and \~11,500 MAGs, I've created plots similar to the proteomics samples above for counting bioactivity labels among different substrate categories that the isolate/MAG belongs to.
+
+```{r bacdive_bioactivity_labels, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
+
+plot_bioactivity_distribution(bacdive_bioactivity_df[["filtered_bioactivity_df"]])
+
+```
+
+
+```{r mag_bioactivity_labels, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
+
+filtered_mag_bioactivity <- mag_bioactivity_df[["filtered_bioactivity_df"]]
+
+select_bioactivities <- c("AMP", "AV", "ACE", "ANIF", "AOX", "IMM")
+
+select_filtered_mag_bioactivities <- filtered_mag_bioactivity %>% 
+  filter(bioactivity %in% select_bioactivities)
+
+plot_bioactivity_distribution(filtered_mag_bioactivity)
+plot_bioactivity_distribution(select_filtered_mag_bioactivities)
+
+```
+
+For both the BacDive isolate and MAG predicted peptides, bioactivities of interest with high absolute counts are anti-inflammatory, anti-oxidative, blood-brain barrier penetrating, and neuropeptides. Interestingly the genome-encoded peptides have fewer absolute counts of predicted peptides with ACE-inhibitory and/or DDPIV bioactivity compared to peptides from the peptidomics experiments. 
+
+## Sequence-Based Comparisons to Peptides with Known Bioactivities
+
+As part of the peptide-bioactivity-prediction workflow we also performed DIAMOND Blastp searches of all input peptides to peptides with known or predicted bioactivities in the Peptipedia database, specifically highlighting those that came from the FermFooDB database, which are peptides from fermented foods, the majority of which have some amount of experimental evidence for the labeled bioactivity.
+
+### Comparisons of Peptides from Proteomics Experiments to Peptipedia Database Sequences
+
+First we'll analyze the results of DIAMOND Blastp searches of the peptides from the five proteomics experiments to the peptipedia database sequences.
+
+The table below gives summaries for each peptipedia ID in the database that had a hit, how many query peptide sequences hit that DB sequence, the median percent identity, median alignment length of the hit, and then if the database sequence has experimental or predicted bioactivities. Additionally we've included if the sequence is also in the FermFooDB, which has an extra level of curation for experimental evidence of certain bioactivities and what fermented foods that peptide has been found/studied in.
+
+```{r, proteomics_peptipedia_comps, echo=FALSE, message=FALSE, warning=FALSE}
+
+proteomics_peptipedia_hits <- process_peptipedia_hits(proteomics_bioactivity_metadata, peptipedia_metadata)
+
+format_summary_table(proteomics_peptipedia_hits[["stats_summary"]])
+
+```
 
 
 ## Bioactivity Categories {#bioactivity-categories}
