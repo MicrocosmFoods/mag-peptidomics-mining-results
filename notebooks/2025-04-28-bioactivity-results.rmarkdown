@@ -7,6 +7,8 @@ format:
 editor: visual
 ---
 
+
+
 This report summarizes results of predicted bioactivity of peptides from diverse fermented foods datasets. The peptides were predicted either using the [bacMAGmining](https://github.com/elizabethmcd/bacMAGmining) workflow for predicting small ORF (smORF) peptides, cleavage peptides, and leader sequences of RiPP peptides or directly from peptidomics experiments. Bioactivity and peptide characteristics such as physicochemical characteristics, signal peptide signatures, and sequence comparison to known peptide databases was performing using the [peptide-bioactivity-prediction](https://github.com/elizabethmcd/peptide-bioactivity-prediction) workflow.
 
 **Bioactivity label abbreviations are described below, [click here](#bioactivity-categories) to view them or the Bioactivity Categories tab on the right-hand side.**
@@ -18,6 +20,8 @@ The set of peptides were predicted or collected from three main sources, each co
 1.  5 Peptidomics Studies of Fermented Foods
 2.  \~200 Bacterial Isolates from the BacDive database collected from various fermented foods
 3.  \~5,000 bacterial metagenome-assembled genomes (MAGs)
+
+
 
 ```{r setup, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -100,9 +104,13 @@ peptipedia_metadata <- read_tsv("../metadata/2024-11-04-peptipedia-metadata.tsv"
 
 ```
 
+
+
 ### Summary Statistics of Peptides from Proteomics Experiments
 
 For each proteomics experiment, the total number of peptides collected from that experiment, the number of non-toxic peptides (peptides with a TOX probability of \> 0.5), the count of peptides with at least one highly confident bioactivity assignment (with probability = 1), the most confident bioactivity label among those peptides, and the count of peptides with the most common bioactivity label.
+
+
 
 ```{r proteomics_count_summaries, echo=FALSE, warning=FALSE, message=FALSE}
 
@@ -111,9 +119,13 @@ format_summary_table(proteomics_summary_stats)
 
 ```
 
+
+
 ### Summary Statistics of Peptides from BacDive Isolate Genomes
 
 Statistics below for the \~200 BacDive isolate genomes are the same as calculated for the proteomics experiment, except they are given at substrate-level categories for groups of genomes, and also give the counts of genomes in that group. For the summaries of different molecule counts from the output of the bacMAGmining workflow we included counts of propeptides predicted by DeepPeptide. For all bioactivity results and summaries below we remove propeptides predicted by DeepPeptide since one they are cleaved from the precursor protein they don't have independent function of their own.
+
+
 
 ```{r bacdive_count_summaries, echo=FALSE, warning=FALSE, message=FALSE}
 
@@ -122,9 +134,13 @@ format_summary_table(bacdive_summary_stats)
 
 ```
 
+
+
 ### Summary Statistics of Peptides from MAGs
 
 Statistics below for the \~11,500 bacterial MAGs, which are the same as calculated for the above proteomics experiment and BacDive isolate genome peptides. These stats are also given at the substrate-level categories for groups of genomes, and also give the counts of genomes for that group, since there are too many categories at the individual fermented food level for this dataset. For the summaries of different molecule counts from the output of the bacMAGmining workflow we included counts of propeptides predicted by DeepPeptide. For all bioactivity results and summaries below we remove propeptides predicted by DeepPeptide since one they are cleaved from the precursor protein they don't have independent function of their own.
+
+
 
 ```{r mag_count_summaries, echo=FALSE, warning=FALSE, message=FALSE}
 
@@ -132,9 +148,13 @@ mag_summary_stats <- generate_bioactivity_summary(mag_bioactivity_df)
 format_summary_table(mag_summary_stats)
 ```
 
+
+
 ## Bioactivity Summaries
 
 Here I'm going to analyze the counts of different bioactivity labels separately for the the different datasets, mostly because the amounts of peptides between the dataset sources drastically differ as well as the way the substrate labels are assigned in the metadata. Here I'm first interested in the number of absolute peptides per sample that have a confident (probability \> 0.75) likelihood of that bioactivity as predicted with that particular machine learning classification model. This is after filtering out peptides that have a greater than 0.5 probability of being toxic.
+
+
 
 ```{r proteomics_bioactivity_labels, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
 
@@ -142,16 +162,19 @@ plot_bioactivity_distribution(proteomics_bioactivity_df[["filtered_bioactivity_d
 
 ```
 
+
+
 Bioactivity categories of interest that have high absolute counts are ACE inhibitors, anti-inflammatory, anti-oxidant, anti-viral, and DDPIV inhibitors (which help increase levels of GLP-1 and GIP hormones to stimulate insulin release and lower blood sugar levels).
 
 For absolute counts of bioactivity labels of peptides from the \~200 BacDive isolates and \~11,500 MAGs, I've created plots similar to the proteomics samples above for counting bioactivity labels among different substrate categories that the isolate/MAG belongs to.
+
+
 
 ```{r bacdive_bioactivity_labels, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
 
 plot_bioactivity_distribution(bacdive_bioactivity_df[["filtered_bioactivity_df"]])
 
 ```
-
 
 ```{r mag_bioactivity_labels, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
 
@@ -214,6 +237,8 @@ ggsave("../figures/food_peptide_bar_chart.png", food_peptide_bar_chart, width=11
 ggsave("../figures/peptide-piechart.png", piechart, width=15, height=8, units=c("in"))
 ```
 
+
+
 For both the BacDive isolate and MAG predicted peptides, bioactivities of interest with high absolute counts are anti-inflammatory, anti-oxidative, blood-brain barrier penetrating, and neuropeptides. Interestingly the genome-encoded peptides have fewer absolute counts of predicted peptides with ACE-inhibitory and/or DDPIV bioactivity compared to peptides from the peptidomics experiments. 
 
 ## Sequence-Based Comparisons to Peptides with Known Bioactivities
@@ -226,6 +251,8 @@ First we'll analyze the results of DIAMOND Blastp searches of the peptides from 
 
 The table below gives summaries for each peptipedia ID in the database that had a hit, how many query peptide sequences hit that DB sequence, the median percent identity, median alignment length of the hit, and then if the database sequence has experimental or predicted bioactivities. Additionally we've included if the sequence is also in the FermFooDB, which has an extra level of curation for experimental evidence of certain bioactivities and what fermented foods that peptide has been found/studied in.
 
+
+
 ```{r, proteomics_peptipedia_comps, echo=FALSE, message=FALSE, warning=FALSE}
 
 proteomics_peptipedia_hits <- process_peptipedia_hits(proteomics_bioactivity_metadata, peptipedia_metadata)
@@ -234,11 +261,15 @@ format_peptipedia_table(proteomics_peptipedia_hits[["stats_summary"]])
 
 ```
 
+
+
 ### Comparisons of Peptides from MAGs to Peptipedia Database Sequences
 
 Now we'll compare the BLASTp results of peptipedia database sequences to the peptides predicted from MAGs since there were a much larger number of genomes/peptides to work with compared to the BacDive database. 
 
 Most of these bioactivities listed for each Peptipedia database hit are "predicted" in that they were predicted by the Peptipedia ML models for that bioactivity, with very little coming from experimental evidence. 
+
+
 
 ```{r, mag_peptipedia_comps, echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -247,6 +278,8 @@ mag_peptipedia_hits <- process_peptipedia_hits(mag_bioactivity_metadata, peptipe
 format_peptipedia_table(mag_peptipedia_hits[["stats_summary"]])
 
 ```
+
+
 
 
 
@@ -274,3 +307,4 @@ The abbreviations for bioactivity are:
 -   ANIF: Anti-inflammatory - this model I manually made with sequences labelled as "antiinflammatory" in Peptipedia. I attempted to make a classification model using benchmark anti-inflammatory datasets of positive/negative examples, but they performed a lot worse than this one as the amount of sequences available were quite low I think.
 
 Besides the IMM and ANIF models, all models were provided through the AutoPeptideML distribution using benchmark datasets they collected.
+
