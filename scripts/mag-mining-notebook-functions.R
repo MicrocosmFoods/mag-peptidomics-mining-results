@@ -15,7 +15,7 @@ library(DT)
 #' @param genome_id_col Name of the column in metadata containing genome identifiers
 #' @param category_col Name of the column containing substrate/food categories
 #' @return A dataframe with combined results and metadata
-prepare_data <- function(results_path, metadata_path, genome_id_col = "genome_name", category_col = "substrate_category") {
+prepare_data <- function(results_path, metadata_path, genome_id_col = "genome_name", category_col = "ingredient_group") {
   # Read data
   results <- read_tsv(results_path)
   metadata <- read_tsv(metadata_path)
@@ -37,9 +37,9 @@ prepare_data <- function(results_path, metadata_path, genome_id_col = "genome_na
 #' Generate summary statistics by category
 #' 
 #' @param data Combined data from prepare_data function
-#' @param category_col Name of the column to group by (e.g., substrate_category)
+#' @param category_col Name of the column to group by (e.g., ingredient_group)
 #' @return A dataframe with summary statistics by category
-generate_summary_stats <- function(data, category_col = "substrate_category") {
+generate_summary_stats <- function(data, category_col = "ingredient_group") {
   summary_stats <- data %>% 
     group_by(!!sym(category_col)) %>% 
     summarize(
@@ -84,10 +84,10 @@ filter_high_quality <- function(data, min_completeness = 90, max_contamination =
 #' Create genome quality scatter plot
 #' 
 #' @param data Data to plot
-#' @param category_col Name of the column for coloring points (default: "substrate_category")
+#' @param category_col Name of the column for coloring points (default: "ingredient_group")
 #' @param title Plot title
 #' @return A ggplot object
-plot_genome_quality <- function(data, category_col = "substrate_category", title = "Genome Quality Statistics") {
+plot_genome_quality <- function(data, category_col = "ingredient_group", title = "Genome Quality Statistics") {
   # Combine colors from multiple palettes
   custom_colors <- c(
     brewer.pal(8, "Set2"),
@@ -108,10 +108,10 @@ plot_genome_quality <- function(data, category_col = "substrate_category", title
 #' Create BGC distribution plot
 #' 
 #' @param data Data to plot (should be filtered for high quality)
-#' @param category_col Name of the category column (default: "substrate_category")
+#' @param category_col Name of the category column (default: "ingredient_group")
 #' @param include_peptides Whether to include smORF and cleavage peptides (default: FALSE)
 #' @return A ggplot object
-plot_molecule_distribution <- function(data, category_col = "substrate_category", include_peptides = FALSE) {
+plot_molecule_distribution <- function(data, category_col = "ingredient_group", include_peptides = FALSE) {
   # Get molecule columns
   molecule_columns <- c(
     names(data)[grep("^bgc_", names(data))]
@@ -249,7 +249,7 @@ process_peptide_bioactivity_info <- function(bioactivity_results,
 #' @return A dataframe in long format with bioactivity probabilities
 prepare_bioactivity_analysis <- function(bioactivity_data, 
                                          id_column = "peptide_id", 
-                                         category_column = "substrate_category") {
+                                         category_column = "ingredient_group") {
   # Select relevant columns and pivot to long format
   bioactivity_df <- bioactivity_data %>% 
     select(!!sym(id_column), !!sym(category_column), ends_with("_1")) %>% 
@@ -288,7 +288,7 @@ prepare_bioactivity_analysis <- function(bioactivity_data,
 #' @return A dataframe with summary statistics
 generate_bioactivity_summary <- function(bioactivity_analysis, 
                                          id_column = "peptide_id", 
-                                         category_column = "substrate_category",
+                                         category_column = "ingredient_group",
                                          genome_id_column = NULL) {
   
   bioactivity_df <- bioactivity_analysis$bioactivity_df
@@ -354,7 +354,7 @@ generate_bioactivity_summary <- function(bioactivity_analysis,
 #' @param title Plot title
 #' @return A ggplot object
 plot_bioactivity_distribution <- function(filtered_bioactivity_df, 
-                                          category_column = "substrate_category",
+                                          category_column = "ingredient_group",
                                           probability_threshold = 0.75,
                                           title = "Absolute Counts of Bioactivity Labels") {
   
@@ -505,7 +505,7 @@ plot_cluster_sizes <- function(cluster_data,
 #' @return A dataframe with processed BLAST hits
 process_peptipedia_hits <- function(bioactivity_data, 
                                     peptipedia_metadata,
-                                    category_column = "substrate_category") {
+                                    category_column = "ingredient_group") {
   
   # Extract BLAST hits
   blastp_hits <- bioactivity_data %>% 
@@ -553,7 +553,7 @@ process_peptipedia_hits <- function(bioactivity_data,
 #' @return A ggplot object
 plot_peptipedia_hits <- function(blastp_hits_metadata, 
                                  stats_summary,
-                                 category_column = "substrate_category",
+                                 category_column = "ingredient_group",
                                  min_hits = 10,
                                  fermfoodb_only = FALSE,
                                  title = "Distribution of Peptipedia Hits") {

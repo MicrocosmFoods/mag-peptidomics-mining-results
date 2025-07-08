@@ -49,10 +49,10 @@ bacdive_bioactivity_results <- read_tsv("../results/2025-02-24-bacdive-results/2
   select(genbank_accession, everything())
 
 bacdive_metadata <- read_tsv("../metadata/2024-12-06-bacdive-accessions-curated-metadata.tsv") %>% 
-    mutate(substrate_category = ifelse(substrate_category == "grain", "grains", substrate_category))
+    mutate(ingredient_group = ifelse(ingredient_group == "grain", "grains", ingredient_group))
 
 bacdive_bioactivity_metadata <- left_join(bacdive_bioactivity_results, bacdive_metadata) %>%
-  filter(!is.na(substrate_category)) %>% 
+  filter(!is.na(ingredient_group)) %>% 
   distinct(peptide_id, .keep_all = TRUE) %>% 
   mutate(genome_name = genbank_accession) %>% 
   select(-genbank_accession) %>% 
@@ -70,10 +70,12 @@ bacdive_bioactivity_df <- prepare_bioactivity_analysis(bacdive_bioactivity_info_
 mag_bioactivity_results <- read_tsv("../results/2025-04-24-mag-results/2025-04-24-mag-bioactivity-all-peptides-predictions.tsv") %>% 
   mutate(mag_id = str_extract(peptide_id,  "^.*?(?=_id_)"))
 
-mag_metadata <- read.csv("../metadata/Food_MAGs_curated_metadata_250421_corrected_merged_final_v2_corrected.csv")
+mag_metadata_url <- "https://raw.githubusercontent.com/MicrocosmFoods/fermentedfood_metadata_curation/refs/heads/main/data/2025-05-21-genome-metadata-food-taxonomy.tsv"
+
+mag_metadata <- read_tsv(mag_metadata_url) %>% 
+  select(-acid_type, -alcohol_level, -fermentation_temperature, -consistency, -aging_time)
 
 mag_bioactivity_metadata <- left_join(mag_bioactivity_results, mag_metadata) %>%
-  filter(!is.na(substrate_category)) %>% 
   distinct(peptide_id, .keep_all = TRUE) %>% 
   mutate(genome_name = mag_id) %>% 
   select(-mag_id) %>% 
@@ -83,11 +85,12 @@ mag_deeppeptide_results <- "../results/2025-04-24-mag-results/all_deeppeptide_re
 mag_smorfinder_results <- "../results/2025-04-24-mag-results/all_smorfinder_results.tsv"
 mag_ripp_results <- "../results/2025-04-24-mag-results/antismash_peptides.tsv"
 
-mag_bioactivity_info_metadata <- process_peptide_bioactivity_info(mag_bioactivity_metadata, mag_deeppeptide_results, mag_smorfinder_results, mag_ripp_results)
+mag_bioactivity_info_metadata <- process_peptide_bioactivity_info(mag_bioactivity_metadata, mag_deeppeptide_results, mag_smorfinder_results, mag_ripp_results) %>% 
+  select(genome_name, peptide_id, peptide_type, everything())
 
 mag_bioactivity_df <- prepare_bioactivity_analysis(mag_bioactivity_info_metadata)
 
-mag_ff_bioactivity_df <- prepare_bioactivity_analysis(mag_bioactivity_info_metadata, category_column="fermented_food")
+mag_ff_bioactivity_df <- prepare_bioactivity_analysis(mag_bioactivity_info_metadata, category_column="ingredient_group")
 
 filtered_ff_mag_bioactivity <- mag_ff_bioactivity_df[["filtered_bioactivity_df"]]
 
@@ -159,37 +162,14 @@ select_bioactivities <- c("AMP", "AV", "ACE", "ANIF", "AOX", "IMM", "AB")
 
 select_fermented_foods <- c("cheese", "kefir", "salami", "cocoa", "sourdough")
 
-plot_bioactivity_distribution(filtered_mag_bioactivity)
-plot_bioactivity_distribution(select_filtered_mag_bioactivities)
-
-
-# total MAGs in the top 10 fermented foods
+# total MAGs
 mag_totals <- mag_metadata %>% 
-  filter(fermented_food %in% top10_foods) %>% 
-  group_by(fermented_food) %>% 
+  group_by(food_name) %>% 
   count() %>% 
   arrange(desc(n)) %>% 
-  mutate(category_label = paste0(!!sym("fermented_food"), "\n (n=", n, ")"))
-
-food_peptide_bar_chart <- filtered_ff_mag_bioactivity %>% 
-  filter(fermented_food %in% select_fermented_foods,
-         bioactivity     %in% select_bioactivities,
-         probability > 0.75) %>% 
-  left_join(mag_totals) %>% 
-  mutate(bioactivity = if_else(bioactivity == "ANIF", "ANIF", "Other")) %>% 
-  ggplot(aes(x = category_label, fill = bioactivity)) +
-  geom_bar() +
-  scale_fill_manual(values = c(ANIF = "orange", Other = "grey80"),
-                    guide  = FALSE) +
-  theme_classic(base_size = 30) +
-  scale_y_continuous(expand = c(0, 0)) +
-  xlab("Fermented Food (number of genomes)") +
-  ylab("Total Number of Bioactive Peptides")
-
-food_peptide_bar_chart
+  mutate(category_label = paste0(!!sym("food_name"), "\n (n=", n, ")"))
 
 pie_data <- filtered_ff_mag_bioactivity %>% 
-  filter(fermented_food %in% top10_foods) %>% 
   filter(probability > 0.75) %>% 
   filter(bioactivity %in% select_bioactivities) %>% 
   count(bioactivity, name = "total") 
@@ -228,7 +208,7 @@ The table below gives summaries for each peptipedia ID in the database that had 
 
 ```{r, proteomics_peptipedia_comps, echo=FALSE, message=FALSE, warning=FALSE}
 
-proteomics_peptipedia_hits <- process_peptipedia_hits(proteomics_bioactivity_metadata, peptipedia_metadata)
+proteomics_peptipedia_hits <- process_peptipedia_hits(proteomics_bioactivity_metadata, peptipedia_metadata, category_column = "fermented_food")
 
 format_peptipedia_table(proteomics_peptipedia_hits[["stats_summary"]])
 
