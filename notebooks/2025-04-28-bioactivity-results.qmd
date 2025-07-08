@@ -188,10 +188,6 @@ piechart <- ggplot(pie_data, aes("", total, fill = bioactivity)) +
   coord_polar(theta = "y") +
   theme_void() +
   scale_fill_brewer(palette = "Set3", name = "Peptide type")
-
-ggsave("../figures/food_peptide_bar_chart.png", food_peptide_bar_chart, width=11, height=8, units=c("in"))
-
-ggsave("../figures/peptide-piechart.png", piechart, width=15, height=8, units=c("in"))
 ```
 
 For both the BacDive isolate and MAG predicted peptides, bioactivities of interest with high absolute counts are anti-inflammatory, anti-oxidative, blood-brain barrier penetrating, and neuropeptides. Interestingly the genome-encoded peptides have fewer absolute counts of predicted peptides with ACE-inhibitory and/or DDPIV bioactivity compared to peptides from the peptidomics experiments. 
