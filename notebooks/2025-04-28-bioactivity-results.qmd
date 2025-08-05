@@ -88,7 +88,7 @@ mag_ripp_results <- "../results/2025-04-24-mag-results/antismash_peptides.tsv"
 mag_bioactivity_info_metadata <- process_peptide_bioactivity_info(mag_bioactivity_metadata, mag_deeppeptide_results, mag_smorfinder_results, mag_ripp_results) %>% 
   select(genome_name, peptide_id, peptide_type, everything())
 
-write_tsv(mag_bioactivity_info_metadata, "../results/2025-04-24-mag-results/2025-07-08-mag-bioactivity-info.tsv")
+write_tsv(mag_bioactivity_info_metadata, "../results/2025-04-24-mag-results/2025-08-05-mag-bioactivity-info.tsv")
 
 mag_ff_bioactivity_df <- prepare_bioactivity_analysis(mag_bioactivity_info_metadata, category_column="ingredient_group")
 

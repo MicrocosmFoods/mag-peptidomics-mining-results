@@ -1,3 +1,6 @@
+*.zip
+.DS_Store
+results/2025-04-24-mag-results/2025-08-05-mag-bioactivity-info.tsv
 results/2025-04-24-mag-results/2025-07-08-filtered-mag-bioactivity-df.tsv
 results/2025-04-24-mag-results/2025-07-08-mag-bioactivity-info.tsv
 metadata/2024-11-04-peptipedia-metadata.tsv

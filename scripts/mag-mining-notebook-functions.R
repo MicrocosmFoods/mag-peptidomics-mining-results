@@ -223,8 +223,7 @@ process_peptide_bioactivity_info <- function(bioactivity_results,
       select(peptide_id, peptide_type)
     
     ripp_info <- read_tsv(ripp_results) %>% 
-      mutate(bgc_name = gsub(".gbk", "", bgc_file)) %>% 
-      mutate(peptide_id = paste0(mag_id, "_id_", scaffold_name, "_", bgc_name)) %>% 
+      mutate(peptide_id = paste0(mag_id, "_", scaffold_name)) %>% 
       mutate(peptide_type = "ripp") %>% 
       select(peptide_id, peptide_type)
     
@@ -234,7 +233,19 @@ process_peptide_bioactivity_info <- function(bioactivity_results,
     # Clean peptide IDs and join with peptide type info
     bioactivity_data <- bioactivity_data %>% 
       mutate(peptide_id = gsub("\\.gbk.*", "", peptide_id)) %>% 
-      left_join(all_peptide_types_info) %>% 
+      # Create a base peptide ID for matching (remove any number suffix after _)
+      mutate(base_peptide_id = str_replace(peptide_id, "_\\d+$", "")) %>%
+      # First try exact matching with full peptide_id
+      left_join(all_peptide_types_info, by = "peptide_id") %>%
+      # For unmatched rows, try matching with base_peptide_id
+      left_join(
+        all_peptide_types_info %>% rename(peptide_type_base = peptide_type),
+        by = c("base_peptide_id" = "peptide_id")
+      ) %>%
+      # Use exact match if available, otherwise use base match
+      mutate(peptide_type = coalesce(peptide_type, peptide_type_base)) %>%
+      # Remove the temporary columns
+      select(-base_peptide_id, -peptide_type_base) %>%
       filter(peptide_type != "cleavage_propeptide")
   }
   
