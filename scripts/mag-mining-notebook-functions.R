@@ -281,7 +281,7 @@ prepare_bioactivity_analysis <- function(bioactivity_data,
   # Filter out toxic peptides and add binary score
   filtered_bioactivity_df <- bioactivity_df %>% 
     filter(!.data[[id_column]] %in% toxic_peptides) %>% 
-    mutate(binary_score = as.numeric(probability >= 0.5))
+    mutate(binary_score = as.numeric(probability >= 0.75))
   
   return(list(
     bioactivity_df = bioactivity_df,

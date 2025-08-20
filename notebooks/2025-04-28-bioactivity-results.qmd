@@ -7,7 +7,7 @@ format:
 editor: visual
 ---
 
-This report summarizes results of predicted bioactivity of peptides from diverse fermented foods datasets. The peptides were predicted either using the [bacMAGmining](https://github.com/elizabethmcd/bacMAGmining) workflow for predicting small ORF (smORF) peptides, cleavage peptides, and leader sequences of RiPP peptides or directly from peptidomics experiments. Bioactivity and peptide characteristics such as physicochemical characteristics, signal peptide signatures, and sequence comparison to known peptide databases was performing using the [peptide-bioactivity-prediction](https://github.com/elizabethmcd/peptide-bioactivity-prediction) workflow.
+This report summarizes results of predicted bioactivity of peptides from diverse fermented foods datasets. The peptides were predicted either using the [bac-mining](https://github.com/MicrocosmFoods/bac-mining) workflow for predicting small ORF (smORF) peptides, cleavage peptides, and leader sequences of RiPP peptides or directly from peptidomics experiments. Bioactivity and peptide characteristics such as physicochemical characteristics, signal peptide signatures, and sequence comparison to known peptide databases was performing using the [peptide-bioactivity-prediction](https://github.com/MicrocosmFoods/peptide-bioactivity-prediction) workflow.
 
 **Bioactivity label abbreviations are described below, [click here](#bioactivity-categories) to view them or the Bioactivity Categories tab on the right-hand side.**
 
@@ -17,7 +17,7 @@ The set of peptides were predicted or collected from three main sources, each co
 
 1.  5 Peptidomics Studies of Fermented Foods
 2.  \~200 Bacterial Isolates from the BacDive database collected from various fermented foods
-3.  \~5,000 bacterial metagenome-assembled genomes (MAGs)
+3.  \~11,000 bacterial metagenome-assembled genomes (MAGs) and reference genomes. We refer to this as the "MAG" dataset as it is primarily comprised of genomes from fermented food metagenomic surveys
 
 ```{r setup, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -31,7 +31,7 @@ source("../scripts/mag-mining-notebook-functions.R")
 # read in all results files and metadata
 
 # proteomics results and metadata
-proteomics_bioactivity_results <- read_tsv("../results/2025-02-20-proteomics-bioactivity-results/all_peptides_predictions.tsv") %>% 
+proteomics_bioactivity_results <- read_tsv("../results/2025-02-20-proteomics-bioactivity-results/ff_peptidomics_peptides_predictions.tsv") %>% 
   mutate(sample_code = str_extract(peptide_id, ".*(?=_peptides?)" )) %>%
   select(sample_code, everything())
 
@@ -44,7 +44,7 @@ proteomics_bioactivity_metadata <- left_join(proteomics_bioactivity_results, pro
 proteomics_bioactivity_df <- prepare_bioactivity_analysis(proteomics_bioactivity_metadata, category_column = "fermented_food")
 
 # bacdive results and metadata
-bacdive_bioactivity_results <- read_tsv("../results/2025-02-24-bacdive-results/2025-02-24-all-peptides-predictions.tsv") %>% 
+bacdive_bioactivity_results <- read_tsv("../results/2025-02-24-bacdive-results/2025-02-24-bacdive-peptides-predictions.tsv") %>% 
   mutate(genbank_accession = str_extract(peptide_id,  "^.*?(?=_id_)")) %>% 
   select(genbank_accession, everything())
 
@@ -94,7 +94,7 @@ mag_ff_bioactivity_df <- prepare_bioactivity_analysis(mag_bioactivity_info_metad
 
 filtered_ff_mag_bioactivity <- mag_ff_bioactivity_df[["filtered_bioactivity_df"]]
 
-write_tsv(filtered_ff_mag_bioactivity, "../results/2025-04-24-mag-results/2025-07-08-filtered-mag-bioactivity-df.tsv")
+write_tsv(filtered_ff_mag_bioactivity, "../results/cleaned_results/2025-08-08-filtered-mag-bioactivity-df.tsv")
 
 # peptipedia metadata
 peptipedia_metadata <- read_tsv("../metadata/2024-11-04-peptipedia-metadata.tsv") %>% 
@@ -133,7 +133,7 @@ Statistics below for the \~11,500 bacterial MAGs, which are the same as calculat
 
 ```{r mag_count_summaries, echo=FALSE, warning=FALSE, message=FALSE}
 
-mag_summary_stats <- generate_bioactivity_summary(mag_bioactivity_df)
+mag_summary_stats <- generate_bioactivity_summary(mag_ff_bioactivity_df)
 format_summary_table(mag_summary_stats)
 ```
 
@@ -151,46 +151,15 @@ Bioactivity categories of interest that have high absolute counts are ACE inhibi
 
 For absolute counts of bioactivity labels of peptides from the \~200 BacDive isolates and \~11,500 MAGs, I've created plots similar to the proteomics samples above for counting bioactivity labels among different substrate categories that the isolate/MAG belongs to.
 
-```{r bacdive_bioactivity_labels, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
+The first plot below are bioactivity counts for BacDive genomes and the second from the MAG dataset.
+
+```{r bacdive_mag_bioactivity_labels, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
 
 plot_bioactivity_distribution(bacdive_bioactivity_df[["filtered_bioactivity_df"]])
+plot_bioactivity_distribution(mag_ff_bioactivity_df[["filtered_bioactivity_df"]])
 
 ```
 
-
-```{r mag_bioactivity_labels, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10}
-
-select_bioactivities <- c("AMP", "AV", "ACE", "ANIF", "AOX", "IMM", "AB")
-
-select_fermented_foods <- c("cheese", "kefir", "salami", "cocoa", "sourdough")
-
-# total MAGs
-mag_totals <- mag_metadata %>% 
-  group_by(food_name) %>% 
-  count() %>% 
-  arrange(desc(n)) %>% 
-  mutate(category_label = paste0(!!sym("food_name"), "\n (n=", n, ")"))
-
-pie_data <- filtered_ff_mag_bioactivity %>% 
-  filter(probability > 0.75) %>% 
-  filter(bioactivity %in% select_bioactivities) %>% 
-  count(bioactivity, name = "total") 
-
-top4 <- pie_data %>% 
-  slice_max(total, n = 4) 
-
-piechart <- ggplot(pie_data, aes("", total, fill = bioactivity)) +
-  geom_col(width = 1, colour = "white") +
-  geom_text(   
-    data = top4,
-    aes(label = total),
-    position = position_stack(vjust = 0.5),
-    size = 4
-  ) +
-  coord_polar(theta = "y") +
-  theme_void() +
-  scale_fill_brewer(palette = "Set3", name = "Peptide type")
-```
 
 For both the BacDive isolate and MAG predicted peptides, bioactivities of interest with high absolute counts are anti-inflammatory, anti-oxidative, blood-brain barrier penetrating, and neuropeptides. Interestingly the genome-encoded peptides have fewer absolute counts of predicted peptides with ACE-inhibitory and/or DDPIV bioactivity compared to peptides from the peptidomics experiments. 
 
