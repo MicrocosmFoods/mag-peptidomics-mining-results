@@ -68,9 +68,42 @@ prepare_bioactivity_analysis <- function(bioactivity_data,
   ))
 }
 
-filtered_genome_bioactivity_results <- prepare_bioactivity_analysis(genome_bioactivity_results)
+filtered_peptidomics_bioactivity_results_binary <- prepare_bioactivity_analysis(peptidomics_bioactivity_results, category_column = "fermented_food")
 
-filtered_peptidomics_bioactivity_results <- prepare_bioactivity_analysis(peptidomics_bioactivity_results, category_column = "fermented_food")
+filtered_proteomics_bioactivity_results <- filtered_peptidomics_bioactivity_results_binary[["filtered_bioactivity_df"]] %>% 
+  filter(probability > 0.75) %>% 
+  select(-binary_score)
+
+metadata_cols <- c("genome_name", "peptide_id", "peptide_type", "taxonomy", "food_name", "ingredient_group")
+
+genome_bioactivity_cleaned <- genome_bioactivity_results %>% 
+  select(any_of(metadata_cols), ends_with("_1")) %>% 
+  filter(is.na(TOX_1) | TOX_1 < 0.5) %>% 
+  { 
+    df <- .                       # save current data frame
+    bio_cols <- names(select(df, ends_with("_1")))
+    non_tox_cols <- setdiff(bio_cols, "TOX_1")
+    
+    df %>%
+      mutate(across(all_of(non_tox_cols),
+                    ~ ifelse(.x >= 0.75, .x, NA_real_))) %>%
+      rename_with(~ sub("_1$", "", .x), all_of(bio_cols))
+  } %>% 
+  mutate(simplified_food_name = case_when(
+    grepl("cheese brine", food_name, ignore.case = TRUE) ~ food_name,
+    grepl("cheese", food_name, ignore.case = TRUE) ~ "cheese",  
+    grepl("tibicos fig|kefir", food_name, ignore.case = TRUE) ~ "kefir",
+    TRUE ~ food_name   
+  )) %>% 
+  mutate(phylum = gsub(";.*", "", taxonomy)) %>% 
+  select(-taxonomy, -genome_name, -food_name, -TOX) %>% 
+  pivot_longer(
+    !c(peptide_id, peptide_type, simplified_food_name, ingredient_group, phylum),
+    names_to = "bioactivity",
+    values_to = "probability"
+  ) %>% 
+  filter(!is.na(probability))
+
 
 ######################### 
 # plot molecule counts from genome data
@@ -198,7 +231,7 @@ phylum_bgc_inset <- phylum_bgc_counts_plot +
 # inset the phylum plot within BGC counts
 bgc_with_inset <- ggdraw() +
   draw_plot(bgc_counts_plot) +
-  draw_plot(phylum_bgc_inset, x = 0.25, y = 0.35, width = 0.60, height = 0.55)
+  draw_plot(phylum_bgc_inset, x = 0.25, y = 0.30, width = 0.55, height = 0.60)
 
 bgc_with_inset
 
@@ -299,7 +332,7 @@ phylum_peptide_inset <- phylum_peptide_counts_plot +
 # inset the phylum plot within BGC counts
 peptide_with_inset <- ggdraw() +
   draw_plot(peptide_counts_plot) +
-  draw_plot(phylum_peptide_inset, x = 0.25, y = 0.35, width = 0.60, height = 0.55)
+  draw_plot(phylum_peptide_inset, x = 0.25, y = 0.32, width = 0.55, height = 0.60)
 
 peptide_with_inset
 
@@ -307,4 +340,120 @@ peptide_with_inset
 combined_plot <- bgc_with_inset / peptide_with_inset +
   plot_layout(guides = "collect") & theme(legend.position = "bottom")
 
-combined_plot
+ggsave("figures/genomes-molecule-counts-summaries-plot.png", combined_plot, width=11, height=8, units=c("in"))
+
+
+######################### 
+# plot summaries of filtered bioactivity results
+######################### 
+
+select_bioactivities <- c("AB", "ACE", "ANIF", "AOX", "AV", "DPPIV", "IMM")
+top_foods <- c("cheese", "kefir", "salami", "chocolate", "sourdough")
+top_phyla <- c("Actinomycetota", "Bacillota", "Pseudomonadota")
+
+custom_palette <- c(
+  "#80B1D3", # soft blue-green
+  "#66C2A5", # soft teal
+  "#E6C229", # warm gold
+  "#8DA0CB", # muted violet
+  "#FC8D62", # light coral
+  "#E78AC3", # dusty rose
+  "#A6D854"  # pale olive
+)
+
+highlight_colors <- setNames(
+  rep_len(custom_palette, length(select_bioactivities)),
+  select_bioactivities
+)
+
+custom_colors <- c(highlight_colors, "Other" = "#D3D3D3")
+
+bioactivity_summary_plot <- genome_bioactivity_cleaned %>%
+  filter(simplified_food_name %in% top_foods) %>% 
+  mutate(color_group = ifelse(bioactivity %in% select_bioactivities, bioactivity, "Other")) %>%
+  group_by(simplified_food_name, color_group) %>% 
+  summarise(count = n(), .groups="drop") %>%
+  ggplot(aes(x=simplified_food_name, y=count, fill = color_group)) +
+  geom_bar(stat="identity", position = "stack") +
+  scale_fill_manual(values = custom_colors, name = "Bioactivity") +
+  scale_y_continuous(expand=c(0,0), labels = scales::comma, breaks = seq(0, 200000, by = 25000)) +
+  labs(
+    x = "Fermented Food",
+    y = "Peptide Count",
+    title = "Highlighted Bioactivities in Top Fermented Foods"
+  ) +
+  scale_x_discrete(labels = str_to_title) +
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 16, face="bold"),
+    axis.title = element_text(size = 14, face="bold"),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+  
+bioactivity_phylum_plot <- genome_bioactivity_cleaned %>%
+  filter(simplified_food_name %in% top_foods) %>% 
+  filter(phylum %in% top_phyla) %>% 
+  mutate(color_group = ifelse(bioactivity %in% select_bioactivities, bioactivity, "Other")) %>%
+  select(simplified_food_name, phylum, color_group) %>% 
+  group_by(simplified_food_name, phylum, color_group) %>% 
+  summarise(count = n(), .groups="drop") %>%
+  mutate(phylum_label = paste0("italic('", phylum, "')")) %>% 
+  ggplot(aes(x=simplified_food_name, y=count, fill = color_group)) +
+  geom_bar(stat = "identity", position = "stack") +
+  facet_wrap(~ phylum_label, scales = "free_x", labeller = label_parsed) +
+  scale_fill_manual(values = custom_colors, name = "Bioactivity") +
+  scale_y_continuous(expand=c(0,0), labels = scales::comma, breaks = seq(0, 125000, by = 25000)) +
+  labs(
+    x = "Fermented Food",
+    y = "Peptide Count",
+    title = "Highlighted Bioactivities in Top Fermented Foods"
+  ) +
+  scale_x_discrete(labels = str_to_title) +
+  theme_bw(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 16, face="bold"),
+    axis.title = element_text(size = 14, face="bold"),
+    panel.grid = element_blank(),
+    axis.text.x  = element_text(size = 12, angle = 85, hjust = 1),
+    legend.position = "none"
+  )
+
+phylum_bioactivity_inset <- bioactivity_phylum_plot +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.title.y= element_blank(),
+        plot.title = element_blank())
+
+# inset the phylum plot within BGC counts
+bioactivity_with_inset <- ggdraw() +
+  draw_plot(bioactivity_summary_plot) +
+  draw_plot(phylum_bioactivity_inset, x = 0.33, y = 0.32, width = 0.65, height = 0.55)
+
+ggsave("figures/genome-bioactivity-summary-plot.png", bioactivity_with_inset, width=10, height=11, units=c("in"))
+
+# proteomics bioactivity results
+
+proteomics_bioactivity_summary_plot <- filtered_proteomics_bioactivity_results %>% 
+  mutate(color_group = ifelse(bioactivity %in% select_bioactivities, bioactivity, "Other")) %>%
+  select(fermented_food, color_group) %>% 
+  group_by(fermented_food, color_group) %>% 
+  summarise(count = n(), .groups="drop") %>%
+  ggplot(aes(x=fermented_food, y=count, fill=color_group)) +
+  geom_bar(stat="identity", position="stack") +
+  scale_fill_manual(values = custom_colors, name = "Bioactivity") +
+  scale_y_continuous(expand=c(0,0), labels = scales::comma, breaks = seq(0, 80000, by = 25000)) +
+  labs(
+    x = "Fermented Food",
+    y = "Peptide Count",
+    title = "Highlighted Bioactivities in Fermented Foods from Proteomics Experiments"
+  ) +
+  scale_x_discrete(labels = str_to_title) +
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(size = 16, face="bold"),
+    axis.title = element_text(size = 14, face="bold"),
+    panel.grid = element_blank()
+  )
+
+ggsave("figures/proteomics-bioactivity-summary-plot.png", proteomics_bioactivity_summary_plot, width=8, height=10, units=c("in"))
