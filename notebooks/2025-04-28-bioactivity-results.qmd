@@ -41,7 +41,13 @@ proteomics_bioactivity_metadata <- left_join(proteomics_bioactivity_results, pro
   mutate(substrate_category = substrate) %>% 
   select(sample_code, peptide_id, study, fermented_food, substrate_category, category, everything())
 
+write_tsv(proteomics_bioactivity_metadata, "../results/2025-02-20-proteomics-bioactivity-results/ff_peptidomics_peptides_metadata.tsv")
+
 proteomics_bioactivity_df <- prepare_bioactivity_analysis(proteomics_bioactivity_metadata, category_column = "fermented_food")
+
+filtered_proteomics_bioactivity_metadata <- proteomics_bioactivity_df[["filtered_bioactivity_df"]]
+
+write_tsv(filtered_proteomics_bioactivity_metadata, "../results/cleaned_results/2025-08-05-filtered-proteomics-bioactivity.tsv")
 
 # bacdive results and metadata
 bacdive_bioactivity_results <- read_tsv("../results/2025-02-24-bacdive-results/2025-02-24-bacdive-peptides-predictions.tsv") %>% 

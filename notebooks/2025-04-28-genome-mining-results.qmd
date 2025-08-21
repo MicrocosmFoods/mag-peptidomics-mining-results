@@ -20,10 +20,12 @@ source("../scripts/mag-mining-notebook-functions.R")
 bacdive_metadata <- read_tsv("../metadata/2024-12-06-bacdive-accessions-curated-metadata.tsv") %>% 
   mutate(genome_name = genbank_accession) %>% 
   select(-genbank_accession) %>% 
-  select(genome_name, everything()) %>% 
-  filter(!is.na(substrate_category))
+  select(genome_name, everything())
 
-mag_metadata <- read.csv("../metadata/Food_MAGs_curated_metadata_250421_corrected_merged_final_v2_corrected.csv") %>% 
+mag_metadata_url <- "https://raw.githubusercontent.com/MicrocosmFoods/fermentedfood_metadata_curation/refs/heads/main/data/2025-05-21-genome-metadata-food-taxonomy.tsv"
+
+mag_metadata <- read_tsv(mag_metadata_url) %>% 
+  select(-acid_type, -alcohol_level, -fermentation_temperature, -consistency, -aging_time) %>% 
   mutate(genome_name = mag_id) %>% 
   select(-mag_id) %>% 
   select(genome_name, everything())
@@ -36,6 +38,7 @@ mag_molecule_counts <- read_tsv("../results/2025-04-24-mag-results/all_molecule_
 # combine results with metadata
 bacdive_molecule_counts_metadata <- left_join(bacdive_molecule_counts, bacdive_metadata) %>% 
   select(-bgc_bacteriocin)
+
 mag_molecule_counts_metadata <- left_join(mag_molecule_counts, mag_metadata) %>% 
   select(-bgc_bacteriocin)
 ```
@@ -46,7 +49,7 @@ The first table shows stats of genome quality across the major substrate categor
 
 ```{r bacdive_stats_summaries, echo=FALSE, warning=FALSE, message=FALSE, fig.width=10, fig.height=6}
 
-bacdive_stats <- generate_summary_stats(bacdive_molecule_counts_metadata, category_col = "substrate_category")
+bacdive_stats <- generate_summary_stats(bacdive_molecule_counts_metadata, category_col = "category")
 
 bacdive_stats %>% 
   kbl() %>% 
@@ -62,13 +65,13 @@ custom_colors <- c(
 
 bacdive_molecule_counts_metadata %>% 
   ggplot(aes(x=completeness, y=contamination, size=contigs)) +
-  geom_point(aes(color=substrate_category)) +
+  geom_point(aes(color=category)) +
   theme_classic() +
   theme(legend.position = "right") + 
   scale_color_manual(values = custom_colors) +
   ggtitle("Genome Quality Statistics of ~200 BacDive Isolate Genomes from Fermented Foods")
 
-plot_molecule_distribution(bacdive_molecule_counts_metadata, category_col="substrate_category", include_peptides = FALSE)
+plot_molecule_distribution(bacdive_molecule_counts_metadata, category_col="fermented_food", include_peptides = FALSE)
 
 ```
 
@@ -76,7 +79,7 @@ plot_molecule_distribution(bacdive_molecule_counts_metadata, category_col="subst
 The below table and plots are the same representations above, but for the ~11,500 bacterial MAGs assembled from various fermented food metagenomes. 
 
 ```{r mag_stats_summaries, echo=FALSE, warning=FALSE, message=FALSE, fig.width=10, fig.height=6}
-mag_stats <- generate_summary_stats(mag_molecule_counts_metadata, category_col="substrate_category")
+mag_stats <- generate_summary_stats(mag_molecule_counts_metadata, category_col="ingredient_group")
 
 format_summary_table(mag_stats)
 
