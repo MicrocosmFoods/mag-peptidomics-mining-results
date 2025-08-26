@@ -12,7 +12,15 @@ The [fermentefood_mags_curation](https://github.com/MicrocosmFoods/fermentedfood
 
 ## Repository Structure
 
-This repository is setup so that all processed results from the workflows are in `results`, they are analyzed and viewed within the notebooks in the `notebooks` directory, which call functions from the `scripts/mag-mining-notebook-functions.R` script. 
+This repository is setup so that all processed results from the workflows are in `results`, they are analyzed and viewed within the notebooks in the `notebooks` directory, which call functions from the `scripts/mag-mining-notebook-functions.R` script. The subdirectory structure is as follows: 
+
+```
+figures/ - Figures output from notebooks and figure generation scripts
+metadata/ - Genome and proteomics sample metadata, most of the metadata is pulled from a controlled repository link with the most up-to-date genome metadata version
+notebooks/ - Analysis notebooks
+raw_data/ - Raw data for batches of bac-mining runs, BacDive genomes FASTA file, and raw FASTA files for the proteomics experiments
+results/ - Results split up by dataset for outputs from the bac-mining and peptide-bioactivity-predictor workflows, as well as cleaned results
+scripts/ - Scripts for notebook functions, figure generation, parsing and combining FASTA files for feeding into workflows for batch runs, and parsing raw files for the proteomics experiments
 
 ## Results
 
