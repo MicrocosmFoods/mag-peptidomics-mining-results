@@ -1,10 +1,11 @@
 library(tidyverse)
+library(ggh4x)
 library(RColorBrewer)
 library(patchwork)
 library(cowplot)
 
 ######################### 
-# vignette figures for counts of molecules and bioactivity results
+# preprint results figures for summarizing molecule counts and peptides results
 ######################### 
 
 ######################### 
@@ -13,6 +14,7 @@ library(cowplot)
 
 # genome molecule count summary table
 genome_molecule_counts <- read_tsv("results/2025-04-24-mag-results/all_molecule_counts.tsv")
+genome_antismash_summary <- read_tsv("results/2025-04-24-mag-results/antismash_summary.tsv")
 
 # genome bioactivity results
 genome_bioactivity_results <- read_tsv("results/cleaned_results/2025-08-05-mag-bioactivity-info.tsv.gz")
@@ -120,12 +122,33 @@ genome_counts_metadata <- left_join(genome_molecule_counts, mag_metadata) %>%
   )) %>% 
   mutate(phylum = gsub(";.*", "", taxonomy))
 
+genome_antismash_summary_metadata <- genome_antismash_summary %>% 
+  mutate(genome_name = mag_id) %>% 
+  select(-mag_id) %>% 
+  left_join(mag_metadata) %>% 
+  mutate(simplified_food_name = case_when(
+    grepl("cheese brine", food_name, ignore.case = TRUE) ~ food_name,
+    grepl("cheese", food_name, ignore.case = TRUE) ~ "cheese",  
+    grepl("tibicos fig|kefir", food_name, ignore.case = TRUE) ~ "kefir",
+    TRUE ~ food_name   
+  )) %>%
+  mutate(phylum = gsub(";.*", "", taxonomy)) %>% 
+  select(genome_name, bgc_type, phylum, simplified_food_name)
+
 # create counts of genomes in food categories
 food_counts <- genome_counts_metadata %>% 
   select(genome_name, simplified_food_name) %>% 
   filter(!is.na(simplified_food_name)) %>% 
   group_by(simplified_food_name) %>% 
   count()
+
+genome_phylum_counts <- genome_counts_metadata %>% 
+  filter(!is.na(simplified_food_name)) %>% 
+  filter(phylum %in% c("Actinomycetota", "Bacillota", "Pseudomonadota")) %>%
+  select(genome_name, phylum) %>% 
+  group_by(phylum) %>% 
+  count()
+  
 
 food_order <- c("cheese", "kefir", "salami", "chocolate", "sourdough")
 
@@ -134,28 +157,60 @@ counts_vec <- food_counts %>%
   transmute(simplified_food_name, n = as.integer(n)) %>%
   deframe()
 
-pretty_bgc_label <- function(x) {
-  x <- gsub("^bgc_", "", x)  
-  keep <- c("NRPS", "T1PKS", "T3PKS", "RiPP-like")
-  out <- ifelse(x %in% keep, x, str_to_sentence(x))
-  out
-}
+phylum_counts_vec <- genome_phylum_counts %>% 
+  filter(phylum %in% c("Actinomycetota", "Bacillota", "Pseudomonadota")) %>%
+  transmute(phylum, n = as.integer(n)) %>% 
+  deframe()
+
+# get top bgc categories
+top_bgc_categories <- genome_antismash_summary_metadata %>% 
+  count(bgc_type, sort = TRUE) %>% 
+  slice_head(n=8) %>% 
+  pull(bgc_type)
+
+rename_bgc <- c(
+  "Ripp-Like" = "RiPP-like",
+  "Nrps"      = "NRPS",
+  "Ras-Ripp"  = "RaS-RiPP"
+)
+
+# factored levels to order in the plots
+bgc_levels <- sort(unique(c(top_bgc_categories_clean, "Other")))
+bgc_levels <- c(setdiff(bgc_levels, "Other"), "Other")
+
+# counts of bgcs in main foods
+food_bgc_counts <- genome_antismash_summary_metadata %>%
+  filter(simplified_food_name %in% food_order) %>%
+  mutate(
+    simplified_food_name = factor(simplified_food_name, levels = food_order),
+    bgc_type = fct_other(bgc_type, keep = top_bgc_categories, other_level = "Other"),
+    bgc_type = str_to_title(bgc_type),
+    bgc_type = recode(bgc_type, !!!rename_bgc),
+    bgc_type = factor(bgc_type, levels = bgc_levels)
+  ) %>%
+  count(simplified_food_name, bgc_type) %>%
+  group_by(simplified_food_name)
+
+# counts of bgcs within top phyla in the main foods
+phylum_bgc_counts <- genome_antismash_summary_metadata %>%
+  filter(simplified_food_name %in% food_order) %>%
+  mutate(
+    simplified_food_name = factor(simplified_food_name, levels = food_order),
+    bgc_type = fct_other(bgc_type, keep = top_bgc_categories, other_level = "Other"),
+    bgc_type = str_to_title(bgc_type),
+    bgc_type = recode(bgc_type, !!!rename_bgc),
+    bgc_type = factor(bgc_type, levels = bgc_levels)
+  ) %>%
+  filter(phylum %in% c("Actinomycetota", "Bacillota", "Pseudomonadota")) %>%
+  count(simplified_food_name, phylum, bgc_type) %>%
+  arrange(simplified_food_name, phylum, bgc_type) %>%
+  mutate(phylum_label = paste0("italic('", phylum, "')"))
 
 # plot main BGC groups in top food groups
-bgc_counts_plot <- genome_counts_metadata %>%
-  filter(simplified_food_name %in% food_order) %>%
-  mutate(simplified_food_name = factor(simplified_food_name, levels = food_order)) %>%
-  select(genome_name, simplified_food_name, bgc_NRPS, `bgc_RiPP-like`, bgc_T1PKS,
-         bgc_T3PKS, bgc_betalactone, bgc_other, bgc_terpene) %>%
-  pivot_longer(
-    !c(genome_name, simplified_food_name),
-    names_to = "molecule_type",
-    values_to = "count"
-  ) %>%
-  mutate(molecule_type = pretty_bgc_label(molecule_type)) %>%
-  ggplot(aes(x = simplified_food_name, y = count, fill = molecule_type)) +
+bgc_counts_plot <- food_bgc_counts %>% 
+  ggplot(aes(x = simplified_food_name, y = n, fill = bgc_type)) +
   geom_bar(stat = "identity", position = "stack") +
-  scale_fill_brewer(palette = "Set2", name = "BGC Type") +  # prettier colors
+  scale_fill_brewer(palette = "Set3", name = "BGC Type") +
   labs(
     x = "Fermented Food",
     y = "Biosynthetic Gene Cluster Count",
@@ -172,7 +227,7 @@ bgc_counts_plot <- genome_counts_metadata %>%
   scale_y_continuous(expand=c(0,0)) +
   theme_classic(base_size = 13) +
   theme(
-    plot.title   = element_text(size = 18, face = "bold"),
+    plot.title   = element_text(size = 15, face = "bold"),
     axis.title   = element_text(size = 14, face = "bold"),
     axis.text.x  = element_text(size = 12),
     axis.text.y  = element_text(size = 12),
@@ -182,28 +237,20 @@ bgc_counts_plot <- genome_counts_metadata %>%
   )
 
 # counts of BGCs in the top foods faceted by phylum
-phylum_bgc_counts <- genome_counts_metadata %>% 
-  filter(simplified_food_name %in% food_order) %>%
-  mutate(simplified_food_name = factor(simplified_food_name, levels = food_order)) %>%
-  select(genome_name, simplified_food_name, phylum, bgc_NRPS, `bgc_RiPP-like`, bgc_T1PKS,
-         bgc_T3PKS, bgc_betalactone, bgc_other, bgc_terpene) %>%
-  pivot_longer(
-    !c(genome_name, simplified_food_name, phylum),
-    names_to = "molecule_type",
-    values_to = "count"
-  ) %>% 
-  group_by(simplified_food_name, phylum, molecule_type) %>%
-  summarise(total_count = sum(count, na.rm = TRUE), .groups = "drop") %>%
-  arrange(simplified_food_name, phylum, molecule_type) %>% 
-  filter(phylum %in% c("Actinomycetota", "Bacillota", "Pseudomonadota")) %>% 
-  mutate(phylum_label = paste0("italic('", phylum, "')"))
-  
+phylum_labels <- setNames(
+  paste0("italic('", names(phylum_counts_vec), "') ~ '\n(n=", phylum_counts_vec, ")'"),
+  paste0("italic('", names(phylum_counts_vec), "')")
+)
+
 phylum_bgc_counts_plot <- phylum_bgc_counts %>% 
-  mutate(molecule_type = pretty_bgc_label(molecule_type)) %>%
-  ggplot(aes(x = simplified_food_name, y = total_count, fill = molecule_type)) +
+  ggplot(aes(x = simplified_food_name, y = n, fill = bgc_type)) +
   geom_bar(stat = "identity", position = "stack") +
-  facet_wrap(~ phylum_label, scales = "free_x", labeller = label_parsed) +
-  scale_fill_brewer(palette = "Set2", name = "BGC Type") +  # prettier colors
+  facet_wrap(
+    ~ phylum_label,
+    scales   = "free_x",
+    labeller = labeller(phylum_label = phylum_labels, .default = label_parsed)
+  ) +
+  scale_fill_brewer(palette = "Set3", name = "BGC Type") +
   labs(
     x = "Fermented Food",
     y = "Biosynthetic Gene Cluster Count",
@@ -213,7 +260,7 @@ phylum_bgc_counts_plot <- phylum_bgc_counts %>%
   scale_x_discrete(labels = str_to_title) +
   theme_bw(base_size = 13) +
   theme(
-    plot.title   = element_text(size = 18, face = "bold"),
+    plot.title   = element_text(size = 15, face = "bold"),
     axis.title   = element_text(size = 14, face = "bold"),
     axis.text.x  = element_text(size = 12, angle = 85, hjust = 1),
     axis.text.y  = element_text(size = 12),
@@ -231,7 +278,7 @@ phylum_bgc_inset <- phylum_bgc_counts_plot +
 # inset the phylum plot within BGC counts
 bgc_with_inset <- ggdraw() +
   draw_plot(bgc_counts_plot) +
-  draw_plot(phylum_bgc_inset, x = 0.25, y = 0.30, width = 0.55, height = 0.60)
+  draw_plot(phylum_bgc_inset, x = 0.25, y = 0.34, width = 0.58, height = 0.55)
 
 bgc_with_inset
 
@@ -260,8 +307,8 @@ peptide_counts_plot <- genome_counts_metadata %>%
   scale_fill_brewer(palette = "Dark2", name = "Peptide Type") +  # different palette
   labs(
     x = "Fermented Food",
-    y = "Peptide Count",
-    title = "Peptide Counts by Fermented Food"
+    y = "Counts of Peptide Type",
+    title = "Counts of Peptide Types by Fermented Food "
   ) +
   scale_x_discrete(labels = function(x) {
     base <- str_to_title(x)
@@ -274,7 +321,7 @@ peptide_counts_plot <- genome_counts_metadata %>%
   scale_y_continuous(expand=c(0,0)) +
   theme_classic(base_size = 13) +
   theme(
-    plot.title   = element_text(size = 18, face = "bold"),
+    plot.title   = element_text(size = 15, face = "bold"),
     axis.title   = element_text(size = 14, face = "bold"),
     axis.text.x  = element_text(size = 12),
     axis.text.y  = element_text(size = 12),
@@ -303,7 +350,11 @@ phylum_peptide_counts_plot <- phylum_peptide_counts %>%
   mutate(molecule_type = pretty_peptide_label(molecule_type)) %>%
   ggplot(aes(x = simplified_food_name, y = total_count, fill = molecule_type)) +
   geom_bar(stat = "identity", position = "stack") +
-  facet_wrap(~ phylum_label, scales = "free_x", labeller = label_parsed) +
+  facet_wrap(
+    ~ phylum_label,
+    scales   = "free_x",
+    labeller = labeller(phylum_label = phylum_labels, .default = label_parsed)
+  ) +
   scale_fill_brewer(palette = "Set2", name = "Molecule type") +  # prettier colors
   labs(
     x = "Fermented Food",
@@ -332,16 +383,82 @@ phylum_peptide_inset <- phylum_peptide_counts_plot +
 # inset the phylum plot within BGC counts
 peptide_with_inset <- ggdraw() +
   draw_plot(peptide_counts_plot) +
-  draw_plot(phylum_peptide_inset, x = 0.25, y = 0.32, width = 0.55, height = 0.60)
+  draw_plot(phylum_peptide_inset, x = 0.25, y = 0.34, width = 0.58, height = 0.55)
 
 peptide_with_inset
 
 # combine inset plots into one figure
-combined_plot <- bgc_with_inset / peptide_with_inset +
-  plot_layout(guides = "collect") & theme(legend.position = "bottom")
+combined_plot <- (
+  bgc_with_inset / peptide_with_inset
+) +
+  plot_layout(guides = "collect") +
+  plot_annotation(tag_levels = "A") &
+  theme(legend.position = "bottom")
 
 ggsave("figures/genomes-molecule-counts-summaries-plot.png", combined_plot, width=11, height=8, units=c("in"))
 
+
+######################### 
+# summary stats of BGC and peptide types within phyla
+######################### 
+
+genome_peptide_totals <- genome_counts_metadata %>% 
+  select(genome_name, total_length, gc, phylum, species, smorf, deeppeptide_Peptide, deeppeptide_Propeptide)
+
+genome_bgc_totals <- genome_counts_metadata %>% 
+  select(genome_name, phylum) %>% 
+  left_join(genome_bgc_totals, by=c("genome_name", "phylum")) %>% 
+  mutate(n_bgcs = replace_na(n_bgcs, 0),
+         n_bgc_types = replace_na(n_bgc_types, 0)) %>%
+  left_join(genome_counts_metadata) %>% 
+  select(genome_name, n_bgcs, n_bgc_types)
+
+all_totals <- left_join(genome_peptide_totals, genome_bgc_totals, by="genome_name")
+
+molecule_group_totals_long <- all_totals %>% 
+  select(-n_bgc_types) %>% 
+  mutate(bgc = n_bgcs) %>% 
+  mutate(cleavage_peptide = deeppeptide_Peptide) %>% 
+  select(-n_bgcs, -deeppeptide_Propeptide, -deeppeptide_Peptide) %>% 
+  filter(phylum %in% c("Actinomycetota", "Bacillota", "Pseudomonadota")) %>% 
+  pivot_longer(
+    !c(genome_name, total_length, gc, phylum, species),
+    names_to = "molecule_type",
+    values_to = "count"
+  ) %>% 
+  filter(count > 0)
+
+plots_by_type <- molecule_group_totals_long %>%
+  split(.$molecule_type) %>%
+  imap(~ ggplot(.x, aes(x = total_length, y = gc)) +
+         geom_point(aes(size = count, color = phylum), alpha = 0.35) + 
+         scale_size_area(max_size = 10, name = "Count") +
+         guides(color = "none") +  
+         labs(title = .y, x = "Total length", y = "GC%") +
+         theme_bw() +
+         theme(legend.position = "right",
+               plot.title = element_text(face = "bold"))
+  )
+
+color_legend_plot <-
+  ggplot() +
+  geom_point(
+    data = molecule_group_totals_long,
+    aes(x = 1, y = 1, color = phylum),
+    size = 0, 
+    alpha = 0,  
+    show.legend = TRUE
+  ) +
+  guides(size = "none") +
+  labs(color = "Phylum") +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold")
+  )
+
+combined <- (wrap_plots(plots_by_type, ncol = 3) | color_legend_plot) +
+  plot_layout(widths = c(1, 0.18)) 
 
 ######################### 
 # plot summaries of filtered bioactivity results
