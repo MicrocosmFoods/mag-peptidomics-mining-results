@@ -17,7 +17,7 @@ genome_molecule_counts <- read_tsv("results/2025-04-24-mag-results/all_molecule_
 genome_antismash_summary <- read_tsv("results/2025-04-24-mag-results/antismash_summary.tsv")
 
 # genome bioactivity results
-genome_bioactivity_results <- read_tsv("results/cleaned_results/2025-08-05-mag-bioactivity-info.tsv.gz")
+genome_bioactivity_results <- read_tsv("results/2025-04-24-mag-results/2025-04-24-mag-bioactivity-all-peptides-predictions.tsv")
 
 # mag metadata
 mag_metadata_url <- "https://raw.githubusercontent.com/MicrocosmFoods/fermentedfood_metadata_curation/refs/heads/main/data/2025-05-21-genome-metadata-food-taxonomy.tsv"
@@ -29,7 +29,64 @@ mag_metadata <- read_tsv(mag_metadata_url) %>%
   select(genome_name, everything())
 
 # fermented foods peptidomics bioactivity results
-peptidomics_bioactivity_results <- read_tsv("results/2025-02-20-proteomics-bioactivity-results/ff_peptidomics_peptides_metadata.tsv")
+proteomics_bioactivity_results <- read_tsv("results/2025-02-20-proteomics-bioactivity-results/ff_peptidomics_peptides_metadata.tsv")
+
+# representative clusters TSV clustered @ 100% identity for genomes peptides results
+genomes_peptides_100id_clusters <- read_tsv("raw_data/2025-04-23-combined-batch-results/clustering_results/clusters100_cluster.tsv", col_names = c("cluster_id", "peptide_id"))
+genomes_representative_cluster_ids <- genomes_peptides_100id_clusters %>% 
+  distinct(cluster_id) %>% 
+  pull(cluster_id)
+
+# representative clusters TSV clustered @ 100% identity for proteomics peptides results
+proteomics_peptides_100id_clusters <- read_tsv("results/2025-02-20-proteomics-bioactivity-results/clustering/proteomics_100id_cluster.tsv", col_names = c("cluster_id", "peptide_id"))
+proteomics_representative_cluster_ids <- proteomics_peptides_100id_clusters %>%
+  distinct(cluster_id) %>% 
+  pull(cluster_id)
+
+######################### 
+# save raw peptide results DFs for just the representative peptides -> what will go on the dashboard for viewing bioactivity
+######################### 
+# raw genome bioactivity df with rep seqs
+rep_genome_bioactivity_results <- genome_bioactivity_results %>% 
+  filter(peptide_id %in% genomes_representative_cluster_ids) %>% 
+  distinct(peptide_id, .keep_all = TRUE) %>% 
+  select(peptide_id, sequence, ends_with("_1")) %>% 
+  rename_with(~str_remove(., "_1"), ends_with("_1"))
+
+write_tsv(rep_genome_bioactivity_results, "results/representative_seqs_results/2025-09-08-representative-genome-peptide-seqs-bioactivity-results.tsv")
+
+# metadata df to join with clusters
+genome_bioactivity_clusters_metadata <- genome_bioactivity_results %>% 
+  mutate(genome_name = str_extract(peptide_id,  "^.*?(?=_id_)")) %>% 
+  left_join(mag_metadata) %>% 
+  select(peptide_id, taxonomy, food_name, ingredient_group) %>% 
+  left_join(genomes_peptides_100id_clusters)
+
+genome_bioactivity_clusters_metadata_food_counts <- genome_bioactivity_clusters_metadata %>% 
+  group_by(cluster_id, food_name) %>% 
+  count() %>% 
+  mutate(n_peptides = n) %>% 
+  select(-n)
+
+# raw proteomics bioactivity df with rep seqs
+rep_proteomics_bioactivity_results <- proteomics_bioactivity_results %>% 
+  filter(peptide_id %in% proteomics_representative_cluster_ids) %>% 
+  distinct(peptide_id, .keep_all = TRUE) %>% 
+  select(peptide_id, sequence, ends_with("_1")) %>% 
+  rename_with(~str_remove(., "_1"), ends_with("_1"))
+
+write_tsv(rep_proteomics_bioactivity_results, "results/representative_seqs_results/2025-09-08-representative-proteomics-peptide-seqs-bioactivity-results.tsv")
+
+# join clusters counts with fermented food sample types
+proteomics_bioactivity_clusters_metadata <- proteomics_bioactivity_results %>% 
+  select(peptide_id, fermented_food, category) %>% 
+  left_join(proteomics_peptides_100id_clusters)
+
+proteomics_bioactivity_clusters_metadata_food_counts <- proteomics_bioactivity_clusters_metadata %>% 
+  group_by(cluster_id, fermented_food) %>% 
+  count() %>% 
+  mutate(n_peptides = n) %>% 
+  select(-n)
 
 ######################### 
 # filter bioactivity results
@@ -82,7 +139,7 @@ genome_bioactivity_cleaned <- genome_bioactivity_results %>%
   select(any_of(metadata_cols), ends_with("_1")) %>% 
   filter(is.na(TOX_1) | TOX_1 < 0.5) %>% 
   { 
-    df <- .                       # save current data frame
+    df <- . 
     bio_cols <- names(select(df, ends_with("_1")))
     non_tox_cols <- setdiff(bio_cols, "TOX_1")
     
@@ -403,17 +460,25 @@ ggsave("figures/genomes-molecule-counts-summaries-plot.png", combined_plot, widt
 ######################### 
 
 genome_peptide_totals <- genome_counts_metadata %>% 
-  select(genome_name, total_length, gc, phylum, species, smorf, deeppeptide_Peptide, deeppeptide_Propeptide)
+  select(genome_name, total_length, gc, phylum, species, smorf, deeppeptide_Peptide, simplified_food_name)v
 
-genome_bgc_totals <- genome_counts_metadata %>% 
+bgc_counts <- genome_antismash_summary_metadata %>%
+  group_by(genome_name, phylum) %>%
+  summarise(
+    n_bgcs = n(),
+    n_bgc_types = n_distinct(bgc_type),
+    .groups = "drop"
+  )
+  
+genome_bgc_counts <- genome_counts_metadata %>% 
   select(genome_name, phylum) %>% 
-  left_join(genome_bgc_totals, by=c("genome_name", "phylum")) %>% 
+  left_join(bgc_counts, by=c("genome_name", "phylum")) %>% 
   mutate(n_bgcs = replace_na(n_bgcs, 0),
          n_bgc_types = replace_na(n_bgc_types, 0)) %>%
   left_join(genome_counts_metadata) %>% 
   select(genome_name, n_bgcs, n_bgc_types)
 
-all_totals <- left_join(genome_peptide_totals, genome_bgc_totals, by="genome_name")
+all_totals <- left_join(genome_peptide_totals, genome_bgc_counts, by="genome_name")
 
 molecule_group_totals_long <- all_totals %>% 
   select(-n_bgc_types) %>% 
@@ -459,6 +524,167 @@ color_legend_plot <-
 
 combined <- (wrap_plots(plots_by_type, ncol = 3) | color_legend_plot) +
   plot_layout(widths = c(1, 0.18)) 
+
+# top foods stats 
+top_summary <- all_totals %>%
+  filter(simplified_food_name %in% top_foods,
+         phylum %in% top_phyla) %>%
+  group_by(simplified_food_name, phylum) %>%
+  summarise(
+    n_genomes   = n(),
+    total_smorf = sum(smorf, na.rm = TRUE),
+    total_pep   = sum(deeppeptide_Peptide, na.rm = TRUE),
+    total_bgcs  = sum(n_bgcs, na.rm = TRUE),
+    total_bgc_types = sum(n_bgc_types, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# phylum stats 
+phylum_stats <- all_totals %>%
+  filter(!is.na(phylum)) %>% 
+  group_by(phylum) %>%
+  summarise(
+    n_genomes = n(),
+    n_smorf = sum(smorf, na.rm =TRUE),
+    n_pep = sum(deeppeptide_Peptide, na.rm=TRUE),
+    n_bgcs = sum(n_bgcs, na.rm=TRUE),
+    median_smorf = median(smorf, na.rm = TRUE),
+    median_pep = median(deeppeptide_Peptide, na.rm = TRUE),
+    median_bgcs = median(n_bgcs, na.rm = TRUE),
+    median_bgc_types = median(n_bgc_types, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# food stats
+food_stats <- all_totals %>%
+  filter(!is.na(simplified_food_name)) %>% 
+  group_by(simplified_food_name) %>%
+  summarise(
+    n_genomes = n(),
+    n_smorf = sum(smorf, na.rm =TRUE),
+    n_pep = sum(deeppeptide_Peptide, na.rm=TRUE),
+    n_bgcs = sum(n_bgcs, na.rm=TRUE),
+    median_smorf = median(smorf, na.rm = TRUE),
+    median_pep = median(deeppeptide_Peptide, na.rm = TRUE),
+    median_bgcs = median(n_bgcs, na.rm = TRUE),
+    median_bgc_types = median(n_bgc_types, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+######################### 
+# enrichment tests of # molecule types between food groups
+######################### 
+
+# global medians of the dataset
+global_medians <- all_totals %>%
+  summarise(
+    median_smorf = median(smorf, na.rm = TRUE),
+    median_pep  = median(deeppeptide_Peptide, na.rm = TRUE),
+    median_bgcs  = median(n_bgcs, na.rm = TRUE)
+  )
+
+global_means <- all_totals %>%
+  summarise(
+    mean_smorf = mean(smorf, na.rm = TRUE),
+    mean_pep   = mean(deeppeptide_Peptide, na.rm = TRUE),
+    mean_bgcs  = mean(n_bgcs, na.rm = TRUE)
+  )
+
+# food group stats
+food_stats <- all_totals %>%
+  group_by(simplified_food_name) %>%
+  summarise(
+    n_genomes   = n(),
+    mean_smorf  = mean(smorf, na.rm = TRUE),
+    mean_pep    = mean(deeppeptide_Peptide, na.rm = TRUE),
+    mean_bgcs   = mean(n_bgcs, na.rm = TRUE),
+    median_smorf = median(smorf, na.rm = TRUE),
+    median_pep   = median(deeppeptide_Peptide, na.rm = TRUE),
+    median_bgcs  = median(n_bgcs, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    smorf_enrichment_mean  = mean_smorf  / global_means %>% pull(mean_smorf),
+    pep_enrichment_mean    = mean_pep    / global_means %>% pull(mean_pep),
+    bgc_enrichment_mean    = mean_bgcs   / global_means %>% pull(mean_bgcs),
+    smorf_enrichment_median = median_smorf / global_medians %>% pull(median_smorf),
+    pep_enrichment_median   = median_pep   / global_medians %>% pull(median_pep),
+    bgc_enrichment_median   = median_bgcs  / global_medians %>% pull(median_bgcs)
+  )
+
+# food tests
+food_tests <- all_totals %>%
+  filter(!is.na(simplified_food_name)) %>%
+  nest(data = -simplified_food_name) %>%
+  mutate(
+    smorf_test = map(data, ~ safe_wilcox(.x$smorf, global_smorf)),
+    pep_test   = map(data, ~ safe_wilcox(.x$deeppeptide_Peptide, global_pep)),
+    bgc_test   = map(data, ~ safe_wilcox(.x$n_bgcs, global_bgcs))
+  ) %>%
+  transmute(
+    simplified_food_name,
+    smorf_p = map_dbl(smorf_test, ~ .x$result$p.value %||% NA_real_),
+    pep_p   = map_dbl(pep_test,   ~ .x$result$p.value %||% NA_real_),
+    bgc_p   = map_dbl(bgc_test,   ~ .x$result$p.value %||% NA_real_)
+  ) %>%
+  mutate(
+    smorf_p_adj = p.adjust(smorf_p, method = "fdr"),
+    pep_p_adj   = p.adjust(pep_p,   method = "fdr"),
+    bgc_p_adj   = p.adjust(bgc_p,   method = "fdr")
+  )
+
+food_enrichment <- food_stats %>%
+  left_join(food_tests, by = "simplified_food_name")
+
+plot_median_df <- food_enrichment %>%
+  select(simplified_food_name,
+         smorf_enrichment_median, pep_enrichment_median, bgc_enrichment_median,
+         smorf_p_adj, pep_p_adj, bgc_p_adj) %>%
+  pivot_longer(
+    cols = -simplified_food_name,
+    names_to = c("molecule", ".value"),
+    names_pattern = "(.*)_(enrichment_median|p_adj)"
+  ) %>% 
+  filter(!is.na(simplified_food_name))
+
+
+plot_mean_df <- food_enrichment %>%
+  select(simplified_food_name,
+         smorf_enrichment_mean, pep_enrichment_mean, bgc_enrichment_mean,
+         smorf_p_adj, pep_p_adj, bgc_p_adj) %>%
+  pivot_longer(
+    cols = -simplified_food_name,
+    names_to = c("molecule", ".value"),
+    names_pattern = "(.*)_(enrichment_mean|p_adj)"
+  ) %>% 
+  filter(!is.na(simplified_food_name))
+
+
+ggplot(plot_mean_df, aes(x = simplified_food_name, y = molecule, fill = enrichment_mean)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = case_when(
+    p_adj < 0.05 ~ "*",
+    TRUE ~ ""
+  )), color = "black", size = 4) +
+  scale_fill_gradient2(
+    low = "blue", mid = "white", high = "red", midpoint = 1,
+    name = "Enrichment (median ratio)"
+  ) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",                    # legend at bottom
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), # vertical labels
+    panel.grid = element_blank()
+  ) +
+  labs(
+    x = "Food group",
+    y = "Molecule type",
+    title = "Enrichment of molecule types by food group",
+    subtitle = "Color = enrichment vs global median, stars = Wilcoxon FDR significance"
+  )
+
 
 ######################### 
 # plot summaries of filtered bioactivity results
