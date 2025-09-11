@@ -711,28 +711,56 @@ highlight_colors <- setNames(
 
 custom_colors <- c(highlight_colors, "Other" = "#D3D3D3")
 
+bioact_labels <- c(
+  "AB"    = "Antibiotic",
+  "ACE"   = "ACE inhibitor",
+  "ANIF"  = "Anti-inflammatory",
+  "AOX"   = "Antioxidant",
+  "AV"    = "Antiviral",
+  "DPPIV" = "DPP IV inhibitors",
+  "IMM"   = "Immunomodulatory",
+  "Other" = "Other"
+)
+
+legend_breaks <- c(select_bioactivities, "Other")
+
 bioactivity_summary_plot <- genome_bioactivity_cleaned %>%
   filter(simplified_food_name %in% top_foods) %>% 
   mutate(color_group = ifelse(bioactivity %in% select_bioactivities, bioactivity, "Other")) %>%
   group_by(simplified_food_name, color_group) %>% 
   summarise(count = n(), .groups="drop") %>%
-  ggplot(aes(x=simplified_food_name, y=count, fill = color_group)) +
-  geom_bar(stat="identity", position = "stack") +
-  scale_fill_manual(values = custom_colors, name = "Bioactivity") +
-  scale_y_continuous(expand=c(0,0), labels = scales::comma, breaks = seq(0, 200000, by = 25000)) +
+  ggplot(aes(x = simplified_food_name, y = count, fill = color_group)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(
+    values = custom_colors,               # ensure names match the values in color_group
+    breaks = legend_breaks,
+    labels = bioact_labels[legend_breaks],
+    name   = "Bioactivity"
+  ) +
+  scale_y_continuous(
+    expand = c(0,0),
+    labels = scales::comma,
+    breaks = seq(0, 200000, by = 25000)
+  ) +
   labs(
     x = "Fermented Food",
     y = "Peptide Count",
-    title = "Highlighted Bioactivities in Top Fermented Foods"
+    title = "Highlighted Bioactivities of Genome-Encoded\nPeptides in Top Fermented Foods"
   ) +
   scale_x_discrete(labels = str_to_title) +
   theme_classic(base_size = 12) +
   theme(
-    plot.title = element_text(size = 16, face="bold"),
-    axis.title = element_text(size = 14, face="bold"),
-    panel.grid = element_blank(),
-    legend.position = "none"
-  )
+    plot.title   = element_text(size = 16, face = "bold"),
+    axis.title   = element_text(size = 14, face = "bold"),
+    axis.text.x  = element_text(size = 13), 
+    panel.grid   = element_blank(),
+    legend.position      = c(0.6, 0.75),
+    legend.justification = c("left","top"),
+    legend.background    = element_rect(fill = scales::alpha("white", 0.85), color = NA)
+  ) +
+  guides(fill = guide_legend(ncol = 1, byrow = TRUE))
+
+bioactivity_summary_plot
   
 bioactivity_phylum_plot <- genome_bioactivity_cleaned %>%
   filter(simplified_food_name %in% top_foods) %>% 
@@ -777,26 +805,53 @@ ggsave("figures/genome-bioactivity-summary-plot.png", bioactivity_with_inset, wi
 
 # proteomics bioactivity results
 
+library(stringr)
+
 proteomics_bioactivity_summary_plot <- filtered_proteomics_bioactivity_results %>% 
+  filter(fermented_food != "donkey_milk") %>% 
   mutate(color_group = ifelse(bioactivity %in% select_bioactivities, bioactivity, "Other")) %>%
   select(fermented_food, color_group) %>% 
   group_by(fermented_food, color_group) %>% 
   summarise(count = n(), .groups="drop") %>%
-  ggplot(aes(x=fermented_food, y=count, fill=color_group)) +
-  geom_bar(stat="identity", position="stack") +
-  scale_fill_manual(values = custom_colors, name = "Bioactivity") +
-  scale_y_continuous(expand=c(0,0), labels = scales::comma, breaks = seq(0, 80000, by = 25000)) +
+  ggplot(aes(x = fermented_food, y = count, fill = color_group)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(
+    values = custom_colors,
+    breaks = legend_breaks,
+    labels = bioact_labels[legend_breaks],
+    name   = "Bioactivity"
+  ) +
+  scale_y_continuous(
+    expand = c(0, 0),
+    labels = scales::comma,
+    breaks = seq(0, 80000, by = 25000)
+  ) +
   labs(
     x = "Fermented Food",
     y = "Peptide Count",
-    title = "Highlighted Bioactivities in Fermented Foods from Proteomics Experiments"
+    title = "Highlighted Bioactivities in Fermented Foods\nfrom Proteomics Experiments"
   ) +
-  scale_x_discrete(labels = str_to_title) +
+  # clean underscores and wrap words onto new lines
+  scale_x_discrete(labels = function(x) {
+    x %>%
+      str_replace_all("_", " ") %>%   # replace underscores with spaces
+      str_to_title() %>%              # capitalize
+      str_replace_all(" ", "\n")      # force newlines at spaces
+  }) +
   theme_classic(base_size = 12) +
   theme(
-    plot.title = element_text(size = 16, face="bold"),
-    axis.title = element_text(size = 14, face="bold"),
-    panel.grid = element_blank()
-  )
+    plot.title   = element_text(size = 16, face = "bold"),
+    axis.title   = element_text(size = 14, face = "bold"),
+    axis.text.x  = element_text(size = 13, lineheight = 0.9), # improve readability
+    panel.grid   = element_blank(),
+    legend.position      = c(0.6, 0.75),
+    legend.justification = c("left", "top"),
+    legend.background    = element_rect(fill = scales::alpha("white", 0.85), color = NA)
+  ) +
+  guides(fill = guide_legend(ncol = 1, byrow = TRUE))
 
-ggsave("figures/proteomics-bioactivity-summary-plot.png", proteomics_bioactivity_summary_plot, width=8, height=10, units=c("in"))
+
+proteomics_bioactivity_summary_plot
+
+ggsave("figures/genomes-bioactivity-summary-plot.png", bioactivity_summary_plot, width=8, height=6, units=c("in"))
+ggsave("figures/proteomics-bioactivity-summary-plot.png", proteomics_bioactivity_summary_plot, width=8, height=6, units=c("in"))
