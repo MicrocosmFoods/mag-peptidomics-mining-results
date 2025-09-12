@@ -4,6 +4,8 @@ library(RColorBrewer)
 library(patchwork)
 library(cowplot)
 library(UpSetR)
+library(grid)
+library(ggplotify)
 
 ######################### 
 # preprint results figures for summarizing molecule counts and peptides results
@@ -622,42 +624,81 @@ plot_bioactivity_suite <- function(long_df,
 # representative peptides from genomes dataset
 long_nr_genomes <- prep_nr_long(rep_genome_bioactivity_results) 
 genomes_peptides_results <- plot_bioactivity_suite(long_nr_genomes, main_thr = 0.90)
-genomes_peptides_results[["bar_plot"]]
-genomes_peptides_results[["p_supp_plot"]]
+genomes_bioactivity_supp_plot <- genomes_peptides_results[["p_supp_plot"]]
 
 # upset plot
-keep_sets <- colnames(genomes_peptides_results$upset_data)[
-  colSums(genomes_peptides_results$upset_data) > 1500
+up_df <- genomes_peptides_results$upset_data
+
+keep_sets <- colnames(up_df)[
+  colSums(up_df) > 1500
 ]
 
-# run UpSetR only on those
-UpSetR::upset(
-  genomes_peptides_results$upset_data,
-  sets = keep_sets,
-  order.by = "freq"
+genome_upset_plot <- ggplotify::as.grob(
+  UpSetR::upset(up_df[, keep_sets, drop = FALSE],
+                  sets = keep_sets,
+                  order.by = "freq",
+                  nintersects = 40)
 )
+
+# bar plot
+genome_bar_plot <- genomes_peptides_results$bar_plot +
+  ggplot2::theme(
+    plot.margin = margin(0, 0, 0, 0),
+    axis.text.x = element_text(size = 10, angle = 35, hjust = 1),
+    axis.text.y = element_text(size = 10),
+    panel.grid = element_blank()
+  ) +
+  labs(title = NULL)
+
+# save figures separately
+ggsave("figures/genome_peptides_category_counts.png", genome_bar_plot, width=10, height=8, units=c("in"))
+ggsave("figures/genome_peptides_intersections.png", genome_upset_plot, width=10, height=8, units=c("in"))
+ggsave("figures/genome_bioactivity_supp_plot.png", genomes_bioactivity_supp_plot, width=10, height=8, units=c("in"))
+
 
 # representative peptides from proteomics dataset
 long_nr_proteomics <- prep_nr_long(rep_proteomics_bioactivity_results)
 proteomics_peptides_results <- plot_bioactivity_suite(long_nr_proteomics, main_thr=0.90)
 
 proteomics_peptides_results[["bar_plot"]]
+proteomics_bioactivity_supp_plot <- proteomics_peptides_results[["p_supp_plot"]]
+
 # upset plot
-keep_sets <- colnames(proteomics_peptides_results$upset_data)[
-  colSums(proteomics_peptides_results$upset_data) > 85
+proteomics_up_df <- proteomics_peptides_results$upset_data
+
+proteomics_keep_sets <- colnames(proteomics_up_df)[
+  colSums(proteomics_up_df) > 115
 ]
 
-UpSetR::upset(
-  proteomics_peptides_results$upset_data,
-  sets = keep_sets,
-  order.by = "freq"
+proteomics_upset_plot <- ggplotify::as.grob(
+  UpSetR::upset(proteomics_up_df[, proteomics_keep_sets, drop = FALSE],
+                sets = proteomics_keep_sets,
+                order.by = "freq",
+                nintersects = 40,
+                mb.ratio = c(0.65, 0.35))
 )
+
+# bar plot
+proteomics_bar_plot <- proteomics_peptides_results$bar_plot +
+  ggplot2::theme(
+    plot.margin = margin(2, 2, 2, 2),
+    axis.text.x = element_text(size = 10, angle = 35, hjust = 1),
+    axis.text.y = element_text(size = 10),
+    panel.grid = element_blank()
+  ) +
+  labs(title = NULL)
+
+# save plots separately
+ggsave("figures/proteomics_peptides_category_counts.png", proteomics_bar_plot, width=10, height=8, units=c("in"))
+ggsave("figures/proteomics_peptides_intersections.png", proteomics_upset_plot, width=10, height=8, units=c("in"))
+ggsave("figures/proteomics_bioactivity_supp_plot.png", proteomics_bioactivity_supp_plot, width=10, height=8, units=c("in"))
 
 ######################### 
 # peptide BLAST results
 # analyze peptides with a BLAST hit to FermFooDB/Peptipedia, how many times it's detected in the entire dataset
 ######################### 
 
+# genome BLAST results
 representative_genome_seqs_blast_results <- genome_bioactivity_results %>% 
   filter(peptide_id %in% genomes_representative_cluster_ids) %>% 
   filter(!is.na(sseqid)) %>% 
@@ -667,6 +708,45 @@ representative_genome_seqs_blast_results <- genome_bioactivity_results %>%
   select(-peptipedia_sequence) %>% 
   left_join(genome_cluster_counts)
 
+# get hits that are identical to the query and likely have that function
+blast_identical_hits <- representative_genome_seqs_blast_results %>%  
+  filter(pident == 100) %>% 
+  filter(qlen == slen) %>% 
+  filter(!is.na(fermfoodb))
+
+# pull examples and counts across food types
+bacteriocin_example_food_counts <- blast_identical_hits %>% 
+  filter(peptipedia_id %in% c("6328", "7128", "4843")) %>% 
+  select(peptide_id, sequence, peptipedia_id, peptide_count) %>% 
+  left_join(genome_bioactivity_clusters_metadata_food_counts) %>%
+  count(peptipedia_id, food_name, wt = n_peptides, name = "peptides")
+
+# bar plot of bacteriocin-like peptides in dataset and counts in different foods
+plot_df <- bacteriocin_example_food_counts %>%
+  group_by(peptipedia_id) %>%
+  mutate(total = sum(peptides)) %>%
+  ungroup()
+
+cols <- brewer.pal(12, "Set3") 
+cols <- c(cols, brewer.pal(3, "Set1")) 
+
+top_bacteriocin_counts_plot <- ggplot(plot_df,
+       aes(x = fct_reorder(factor(peptipedia_id), total),
+           y = peptides, fill = food_name)) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_fill_manual(values = cols) + 
+  labs(x = "peptipedia_id", y = "Peptide count", fill = "Food") +
+  theme_classic(base_size = 16) + 
+  theme(
+    legend.position = "right",
+    panel.grid = element_blank()
+  )
+
+ggsave("figures/genomes_bacteriocin_counts_plot.png", top_bacteriocin_counts_plot, width=11, height=4.5, units=c("in"))
+
+# proteomics BLAST results
 representative_proteomics_seqs_blast_results <- proteomics_bioactivity_results %>% 
   filter(peptide_id %in% proteomics_representative_cluster_ids) %>% 
   filter(!is.na(sseqid)) %>% 
@@ -676,4 +756,37 @@ representative_proteomics_seqs_blast_results <- proteomics_bioactivity_results %
   select(-peptipedia_sequence) %>% 
   left_join(proteomics_clusters_counts)
   
+# get identical hits
+proteomics_blast_identical_hits <- representative_proteomics_seqs_blast_results %>%  
+  filter(pident == 100) %>% 
+  filter(qlen == slen) %>% 
+  filter(!is.na(fermfoodb))
 
+# proteomics high hit examples
+proteomics_example_food_counts <- proteomics_blast_identical_hits %>% 
+  filter(peptipedia_id %in% c("2056", "25090", "47597")) %>% 
+  select(peptide_id, sequence, peptipedia_id, peptide_count) %>% 
+  left_join(proteomics_bioactivity_clusters_metadata_food_counts, by=c("peptide_id" = "cluster_id")) %>%
+  count(peptipedia_id, fermented_food, wt = n_peptides, name = "peptides")
+
+
+proteomics_plot_df <- proteomics_example_food_counts %>%
+  group_by(peptipedia_id) %>%
+  mutate(total = sum(peptides)) %>%
+  ungroup() %>% 
+  mutate(fermented_food = gsub("_", " ", fermented_food))
+
+proteomics_top_hits_plot <- ggplot(proteomics_plot_df, aes(x = fct_reorder(factor(peptipedia_id), total),
+                                          y = peptides, fill = fermented_food)) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_fill_brewer(palette = "Set2") + 
+  labs(x = "peptipedia_id", y = "Peptide count", fill = "Food") +
+  theme_classic(base_size = 16) + 
+  theme(
+    legend.position = "right",
+    panel.grid = element_blank()
+  )
+
+ggsave("figures/proteomics_blast_example_counts_plot.png", proteomics_top_hits_plot, width=10, height=5, units=c("in"))
