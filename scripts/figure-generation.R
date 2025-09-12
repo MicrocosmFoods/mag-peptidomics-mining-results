@@ -34,6 +34,7 @@ proteomics_bioactivity_results <- read_tsv("results/2025-02-20-proteomics-bioact
 
 # representative clusters TSV clustered @ 100% identity for genomes peptides results
 genomes_peptides_100id_clusters <- read_tsv("raw_data/2025-04-23-combined-batch-results/clusters100/clusters.tsv", col_names = c("cluster_id", "peptide_id"))
+
 genomes_representative_cluster_ids <- genomes_peptides_100id_clusters %>% 
   distinct(cluster_id) %>% 
   pull(cluster_id)
@@ -74,9 +75,15 @@ genome_bioactivity_clusters_metadata <- genome_bioactivity_results %>%
 genome_bioactivity_clusters_metadata_food_counts <- genome_bioactivity_clusters_metadata %>% 
   group_by(cluster_id, food_name) %>% 
   count() %>% 
-  mutate(n_peptides = n) %>% 
+  mutate(n_peptides = n, peptide_id=cluster_id) %>% 
   select(-n)
 
+genome_cluster_counts <- genome_bioactivity_clusters_metadata %>% 
+  group_by(cluster_id) %>% 
+  count()
+
+colnames(genome_cluster_counts) <- c("peptide_id", "peptide_count")
+ 
 # raw proteomics bioactivity df with rep seqs
 rep_proteomics_bioactivity_results <- proteomics_bioactivity_results %>% 
   filter(peptide_id %in% proteomics_representative_cluster_ids) %>% 
@@ -96,6 +103,12 @@ proteomics_bioactivity_clusters_metadata_food_counts <- proteomics_bioactivity_c
   count() %>% 
   mutate(n_peptides = n) %>% 
   select(-n)
+
+proteomics_clusters_counts <- proteomics_bioactivity_clusters_metadata %>% 
+  group_by(cluster_id) %>% 
+  count()
+
+colnames(proteomics_clusters_counts) <- c("peptide_id", "peptide_count")
 
 ######################### 
 # plot molecule counts from genome data
@@ -650,13 +663,17 @@ representative_genome_seqs_blast_results <- genome_bioactivity_results %>%
   filter(!is.na(sseqid)) %>% 
   mutate(peptipedia_id = sseqid) %>% 
   select(peptide_id, sequence, peptipedia_id, full_sseq, pident, length, qlen, slen, mismatch, gapopen, qstart, qend, sstart, send, evalue, bitscore) %>% 
-  left_join(peptipedia_metadata, by = "peptipedia_id")
+  left_join(peptipedia_metadata, by = "peptipedia_id") %>% 
+  select(-peptipedia_sequence) %>% 
+  left_join(genome_cluster_counts)
 
 representative_proteomics_seqs_blast_results <- proteomics_bioactivity_results %>% 
   filter(peptide_id %in% proteomics_representative_cluster_ids) %>% 
   filter(!is.na(sseqid)) %>% 
   mutate(peptipedia_id = sseqid) %>% 
   select(peptide_id, sequence, peptipedia_id, full_sseq, pident, length, qlen, slen, mismatch, gapopen, qstart, qend, sstart, send, evalue, bitscore) %>% 
-  left_join(peptipedia_metadata, by="peptipedia_id")
+  left_join(peptipedia_metadata, by="peptipedia_id") %>% 
+  select(-peptipedia_sequence) %>% 
+  left_join(proteomics_clusters_counts)
   
 
