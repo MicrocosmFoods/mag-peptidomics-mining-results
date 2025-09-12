@@ -3,6 +3,7 @@ library(ggh4x)
 library(RColorBrewer)
 library(patchwork)
 library(cowplot)
+library(UpSetR)
 
 ######################### 
 # preprint results figures for summarizing molecule counts and peptides results
@@ -32,20 +33,28 @@ mag_metadata <- read_tsv(mag_metadata_url) %>%
 proteomics_bioactivity_results <- read_tsv("results/2025-02-20-proteomics-bioactivity-results/ff_peptidomics_peptides_metadata.tsv")
 
 # representative clusters TSV clustered @ 100% identity for genomes peptides results
-genomes_peptides_100id_clusters <- read_tsv("raw_data/2025-04-23-combined-batch-results/clustering_results/clusters100_cluster.tsv", col_names = c("cluster_id", "peptide_id"))
+genomes_peptides_100id_clusters <- read_tsv("raw_data/2025-04-23-combined-batch-results/clusters100/clusters.tsv", col_names = c("cluster_id", "peptide_id"))
 genomes_representative_cluster_ids <- genomes_peptides_100id_clusters %>% 
   distinct(cluster_id) %>% 
   pull(cluster_id)
 
 # representative clusters TSV clustered @ 100% identity for proteomics peptides results
-proteomics_peptides_100id_clusters <- read_tsv("results/2025-02-20-proteomics-bioactivity-results/clustering/proteomics_100id_cluster.tsv", col_names = c("cluster_id", "peptide_id"))
+proteomics_peptides_100id_clusters <- read_tsv("results/2025-02-20-proteomics-bioactivity-results/clusters100/clusters.tsv", col_names = c("cluster_id", "peptide_id"))
 proteomics_representative_cluster_ids <- proteomics_peptides_100id_clusters %>%
   distinct(cluster_id) %>% 
   pull(cluster_id)
 
+# peptipedia DB curated metadata
+peptipedia_metadata <- read_tsv("metadata/2025-08-11-peptipedia-validated-metadata.tsv") %>% 
+  mutate(peptipedia_id = peptide_id) %>% 
+  select(-peptide_id) %>% 
+  mutate(peptipedia_sequence = sequence) %>% 
+  select(-sequence)
+
 ######################### 
-# save raw peptide results DFs for just the representative peptides -> what will go on the dashboard for viewing bioactivity
+# save raw peptide results DFs for just the representative peptides
 ######################### 
+
 # raw genome bioactivity df with rep seqs
 rep_genome_bioactivity_results <- genome_bioactivity_results %>% 
   filter(peptide_id %in% genomes_representative_cluster_ids) %>% 
@@ -89,82 +98,6 @@ proteomics_bioactivity_clusters_metadata_food_counts <- proteomics_bioactivity_c
   select(-n)
 
 ######################### 
-# filter bioactivity results
-# remove toxic peptides if have probability > 0.5
-# keep a bioactivity only if probability > 0.75
-######################### 
-
-# function to filter bioactivity results
-prepare_bioactivity_analysis <- function(bioactivity_data, 
-                                         id_column = "peptide_id", 
-                                         category_column = "food_name") {
-  # Select relevant columns and pivot to long format
-  bioactivity_df <- bioactivity_data %>% 
-    select(!!sym(id_column), !!sym(category_column), ends_with("_1")) %>% 
-    distinct() %>% 
-    rename_with(~str_remove(., "_1"), ends_with("_1")) %>% 
-    pivot_longer(
-      -c(!!sym(id_column), !!sym(category_column)),
-      names_to = "bioactivity",
-      values_to = "probability"
-    )
-  
-  # Identify toxic peptides
-  toxic_peptides <- bioactivity_df %>% 
-    filter(bioactivity == "TOX") %>% 
-    filter(probability >= 0.5) %>% 
-    pull(!!sym(id_column))
-  
-  # Filter out toxic peptides and add binary score
-  filtered_bioactivity_df <- bioactivity_df %>% 
-    filter(!.data[[id_column]] %in% toxic_peptides) %>% 
-    mutate(binary_score = as.numeric(probability >= 0.75))
-  
-  return(list(
-    bioactivity_df = bioactivity_df,
-    toxic_peptides = toxic_peptides,
-    filtered_bioactivity_df = filtered_bioactivity_df
-  ))
-}
-
-filtered_peptidomics_bioactivity_results_binary <- prepare_bioactivity_analysis(peptidomics_bioactivity_results, category_column = "fermented_food")
-
-filtered_proteomics_bioactivity_results <- filtered_peptidomics_bioactivity_results_binary[["filtered_bioactivity_df"]] %>% 
-  filter(probability > 0.75) %>% 
-  select(-binary_score)
-
-metadata_cols <- c("genome_name", "peptide_id", "peptide_type", "taxonomy", "food_name", "ingredient_group")
-
-genome_bioactivity_cleaned <- genome_bioactivity_results %>% 
-  select(any_of(metadata_cols), ends_with("_1")) %>% 
-  filter(is.na(TOX_1) | TOX_1 < 0.5) %>% 
-  { 
-    df <- . 
-    bio_cols <- names(select(df, ends_with("_1")))
-    non_tox_cols <- setdiff(bio_cols, "TOX_1")
-    
-    df %>%
-      mutate(across(all_of(non_tox_cols),
-                    ~ ifelse(.x >= 0.75, .x, NA_real_))) %>%
-      rename_with(~ sub("_1$", "", .x), all_of(bio_cols))
-  } %>% 
-  mutate(simplified_food_name = case_when(
-    grepl("cheese brine", food_name, ignore.case = TRUE) ~ food_name,
-    grepl("cheese", food_name, ignore.case = TRUE) ~ "cheese",  
-    grepl("tibicos fig|kefir", food_name, ignore.case = TRUE) ~ "kefir",
-    TRUE ~ food_name   
-  )) %>% 
-  mutate(phylum = gsub(";.*", "", taxonomy)) %>% 
-  select(-taxonomy, -genome_name, -food_name, -TOX) %>% 
-  pivot_longer(
-    !c(peptide_id, peptide_type, simplified_food_name, ingredient_group, phylum),
-    names_to = "bioactivity",
-    values_to = "probability"
-  ) %>% 
-  filter(!is.na(probability))
-
-
-######################### 
 # plot molecule counts from genome data
 ######################### 
 
@@ -205,7 +138,6 @@ genome_phylum_counts <- genome_counts_metadata %>%
   select(genome_name, phylum) %>% 
   group_by(phylum) %>% 
   count()
-  
 
 food_order <- c("cheese", "kefir", "salami", "chocolate", "sourdough")
 
@@ -572,286 +504,159 @@ food_stats <- all_totals %>%
   )
 
 ######################### 
-# enrichment tests of # molecule types between food groups
+# peptide bioactivity results
+# Analyze the representative peptides (clustered at 100% sequence identity)
 ######################### 
 
-# global medians of the dataset
-global_medians <- all_totals %>%
-  summarise(
-    median_smorf = median(smorf, na.rm = TRUE),
-    median_pep  = median(deeppeptide_Peptide, na.rm = TRUE),
-    median_bgcs  = median(n_bgcs, na.rm = TRUE)
-  )
-
-global_means <- all_totals %>%
-  summarise(
-    mean_smorf = mean(smorf, na.rm = TRUE),
-    mean_pep   = mean(deeppeptide_Peptide, na.rm = TRUE),
-    mean_bgcs  = mean(n_bgcs, na.rm = TRUE)
-  )
-
-# food group stats
-food_stats <- all_totals %>%
-  group_by(simplified_food_name) %>%
-  summarise(
-    n_genomes   = n(),
-    mean_smorf  = mean(smorf, na.rm = TRUE),
-    mean_pep    = mean(deeppeptide_Peptide, na.rm = TRUE),
-    mean_bgcs   = mean(n_bgcs, na.rm = TRUE),
-    median_smorf = median(smorf, na.rm = TRUE),
-    median_pep   = median(deeppeptide_Peptide, na.rm = TRUE),
-    median_bgcs  = median(n_bgcs, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    smorf_enrichment_mean  = mean_smorf  / global_means %>% pull(mean_smorf),
-    pep_enrichment_mean    = mean_pep    / global_means %>% pull(mean_pep),
-    bgc_enrichment_mean    = mean_bgcs   / global_means %>% pull(mean_bgcs),
-    smorf_enrichment_median = median_smorf / global_medians %>% pull(median_smorf),
-    pep_enrichment_median   = median_pep   / global_medians %>% pull(median_pep),
-    bgc_enrichment_median   = median_bgcs  / global_medians %>% pull(median_bgcs)
-  )
-
-# food tests
-food_tests <- all_totals %>%
-  filter(!is.na(simplified_food_name)) %>%
-  nest(data = -simplified_food_name) %>%
-  mutate(
-    smorf_test = map(data, ~ safe_wilcox(.x$smorf, global_smorf)),
-    pep_test   = map(data, ~ safe_wilcox(.x$deeppeptide_Peptide, global_pep)),
-    bgc_test   = map(data, ~ safe_wilcox(.x$n_bgcs, global_bgcs))
-  ) %>%
-  transmute(
-    simplified_food_name,
-    smorf_p = map_dbl(smorf_test, ~ .x$result$p.value %||% NA_real_),
-    pep_p   = map_dbl(pep_test,   ~ .x$result$p.value %||% NA_real_),
-    bgc_p   = map_dbl(bgc_test,   ~ .x$result$p.value %||% NA_real_)
-  ) %>%
-  mutate(
-    smorf_p_adj = p.adjust(smorf_p, method = "fdr"),
-    pep_p_adj   = p.adjust(pep_p,   method = "fdr"),
-    bgc_p_adj   = p.adjust(bgc_p,   method = "fdr")
-  )
-
-food_enrichment <- food_stats %>%
-  left_join(food_tests, by = "simplified_food_name")
-
-plot_median_df <- food_enrichment %>%
-  select(simplified_food_name,
-         smorf_enrichment_median, pep_enrichment_median, bgc_enrichment_median,
-         smorf_p_adj, pep_p_adj, bgc_p_adj) %>%
-  pivot_longer(
-    cols = -simplified_food_name,
-    names_to = c("molecule", ".value"),
-    names_pattern = "(.*)_(enrichment_median|p_adj)"
-  ) %>% 
-  filter(!is.na(simplified_food_name))
-
-
-plot_mean_df <- food_enrichment %>%
-  select(simplified_food_name,
-         smorf_enrichment_mean, pep_enrichment_mean, bgc_enrichment_mean,
-         smorf_p_adj, pep_p_adj, bgc_p_adj) %>%
-  pivot_longer(
-    cols = -simplified_food_name,
-    names_to = c("molecule", ".value"),
-    names_pattern = "(.*)_(enrichment_mean|p_adj)"
-  ) %>% 
-  filter(!is.na(simplified_food_name))
-
-
-ggplot(plot_mean_df, aes(x = simplified_food_name, y = molecule, fill = enrichment_mean)) +
-  geom_tile(color = "white") +
-  geom_text(aes(label = case_when(
-    p_adj < 0.05 ~ "*",
-    TRUE ~ ""
-  )), color = "black", size = 4) +
-  scale_fill_gradient2(
-    low = "blue", mid = "white", high = "red", midpoint = 1,
-    name = "Enrichment (median ratio)"
-  ) +
-  scale_x_discrete(expand = c(0, 0)) +
-  scale_y_discrete(expand = c(0, 0)) +
-  theme_minimal(base_size = 12) +
-  theme(
-    legend.position = "bottom",                    # legend at bottom
-    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), # vertical labels
-    panel.grid = element_blank()
-  ) +
-  labs(
-    x = "Food group",
-    y = "Molecule type",
-    title = "Enrichment of molecule types by food group",
-    subtitle = "Color = enrichment vs global median, stars = Wilcoxon FDR significance"
-  )
-
-
-######################### 
-# plot summaries of filtered bioactivity results
-######################### 
-
-select_bioactivities <- c("AB", "ACE", "ANIF", "AOX", "AV", "DPPIV", "IMM")
-top_foods <- c("cheese", "kefir", "salami", "chocolate", "sourdough")
-top_phyla <- c("Actinomycetota", "Bacillota", "Pseudomonadota")
-
-custom_palette <- c(
-  "#80B1D3", # soft blue-green
-  "#66C2A5", # soft teal
-  "#E6C229", # warm gold
-  "#8DA0CB", # muted violet
-  "#FC8D62", # light coral
-  "#E78AC3", # dusty rose
-  "#A6D854"  # pale olive
-)
-
-highlight_colors <- setNames(
-  rep_len(custom_palette, length(select_bioactivities)),
-  select_bioactivities
-)
-
-custom_colors <- c(highlight_colors, "Other" = "#D3D3D3")
-
-bioact_labels <- c(
-  "AB"    = "Antibiotic",
-  "ACE"   = "ACE inhibitor",
-  "ANIF"  = "Anti-inflammatory",
-  "AOX"   = "Antioxidant",
-  "AV"    = "Antiviral",
-  "DPPIV" = "DPP IV inhibitors",
-  "IMM"   = "Immunomodulatory",
-  "Other" = "Other"
-)
-
-legend_breaks <- c(select_bioactivities, "Other")
-
-bioactivity_summary_plot <- genome_bioactivity_cleaned %>%
-  filter(simplified_food_name %in% top_foods) %>% 
-  mutate(color_group = ifelse(bioactivity %in% select_bioactivities, bioactivity, "Other")) %>%
-  group_by(simplified_food_name, color_group) %>% 
-  summarise(count = n(), .groups="drop") %>%
-  ggplot(aes(x = simplified_food_name, y = count, fill = color_group)) +
-  geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(
-    values = custom_colors,               # ensure names match the values in color_group
-    breaks = legend_breaks,
-    labels = bioact_labels[legend_breaks],
-    name   = "Bioactivity"
-  ) +
-  scale_y_continuous(
-    expand = c(0,0),
-    labels = scales::comma,
-    breaks = seq(0, 200000, by = 25000)
-  ) +
-  labs(
-    x = "Fermented Food",
-    y = "Peptide Count",
-    title = "Highlighted Bioactivities of Genome-Encoded\nPeptides in Top Fermented Foods"
-  ) +
-  scale_x_discrete(labels = str_to_title) +
-  theme_classic(base_size = 12) +
-  theme(
-    plot.title   = element_text(size = 16, face = "bold"),
-    axis.title   = element_text(size = 14, face = "bold"),
-    axis.text.x  = element_text(size = 13), 
-    panel.grid   = element_blank(),
-    legend.position      = c(0.6, 0.75),
-    legend.justification = c("left","top"),
-    legend.background    = element_rect(fill = scales::alpha("white", 0.85), color = NA)
-  ) +
-  guides(fill = guide_legend(ncol = 1, byrow = TRUE))
-
-bioactivity_summary_plot
+# remove toxic peptides and pivot to long for counts
+prep_nr_long <- function(df = rep_genome_bioactivity_results,
+                         id_cols = c("peptide_id","sequence"),
+                         tox_col = "TOX", tox_cut = 0.5) {
+  bio_cols <- df |> select(where(is.numeric)) |> names()
+  bio_cols <- setdiff(bio_cols, id_cols)
   
-bioactivity_phylum_plot <- genome_bioactivity_cleaned %>%
-  filter(simplified_food_name %in% top_foods) %>% 
-  filter(phylum %in% top_phyla) %>% 
-  mutate(color_group = ifelse(bioactivity %in% select_bioactivities, bioactivity, "Other")) %>%
-  select(simplified_food_name, phylum, color_group) %>% 
-  group_by(simplified_food_name, phylum, color_group) %>% 
-  summarise(count = n(), .groups="drop") %>%
-  mutate(phylum_label = paste0("italic('", phylum, "')")) %>% 
-  ggplot(aes(x=simplified_food_name, y=count, fill = color_group)) +
-  geom_bar(stat = "identity", position = "stack") +
-  facet_wrap(~ phylum_label, scales = "free_x", labeller = label_parsed) +
-  scale_fill_manual(values = custom_colors, name = "Bioactivity") +
-  scale_y_continuous(expand=c(0,0), labels = scales::comma, breaks = seq(0, 125000, by = 25000)) +
-  labs(
-    x = "Fermented Food",
-    y = "Peptide Count",
-    title = "Highlighted Bioactivities in Top Fermented Foods"
-  ) +
-  scale_x_discrete(labels = str_to_title) +
-  theme_bw(base_size = 12) +
-  theme(
-    plot.title = element_text(size = 16, face="bold"),
-    axis.title = element_text(size = 14, face="bold"),
-    panel.grid = element_blank(),
-    axis.text.x  = element_text(size = 12, angle = 85, hjust = 1),
-    legend.position = "none"
+  if (tox_col %in% names(df)) {
+    df <- df |> filter(.data[[tox_col]] < tox_cut | is.na(.data[[tox_col]]))
+    bio_cols <- setdiff(bio_cols, tox_col)
+  }
+  
+  long <- df |>
+    select(any_of(id_cols), any_of(bio_cols)) |>
+    pivot_longer(cols = any_of(bio_cols),
+                 names_to = "bioactivity",
+                 values_to = "probability")
+  
+  long
+}
+
+# plot bioactivity results
+# create bar plot of number of peptides with a bioactivity given probability threshold
+# plot UpSet plot of overlapping categories
+# create supplementary bar plot figure at different thresholds 0.5 > 1 at 0.10 intervals
+plot_bioactivity_suite <- function(long_df,
+                                   id_col = "peptide_id",
+                                   main_thr = 0.75,
+                                   save_dir = "figures",
+                                   save = TRUE) {
+  dir.create(save_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  # Main bar
+  bar_main_df <- long_df |>
+    summarise(count = sum(probability >= main_thr, na.rm = TRUE), .by = bioactivity) |>
+    arrange(desc(count)) |>
+    mutate(bioactivity = forcats::fct_reorder(bioactivity, count))
+  
+  p_bar <- ggplot(bar_main_df, aes(bioactivity, count)) +
+    geom_col() +
+    labs(x = "Bioactivity", y = "Number of Peptides with Predicted Bioactivity",
+         title = sprintf("Non-redundant peptides per bioactivity (TOX≥0.5 removed, p≥%.2f)", main_thr)) +
+    theme_classic(base_size = 12) +
+    theme(axis.text.x = element_text(angle = 35, hjust = 1)) +
+    scale_y_continuous(expand=c(0,0))
+  
+  if (save) ggsave(file.path(save_dir, "nrpeptides_main_bar_p075.png"), p_bar,
+                   width = 8, height = 5, units = "in", dpi = 300)
+  
+  # Prep UpSet data only (no plotting here)
+  upset_data <- NULL
+  wide_bin <- long_df |>
+    mutate(hit = as.integer(probability >= main_thr)) |>
+    select(all_of(id_col), bioactivity, hit) |>
+    distinct() |>
+    tidyr::pivot_wider(names_from = bioactivity, values_from = hit, values_fill = 0)
+  
+  cols <- setdiff(names(wide_bin), id_col)
+  keep <- cols[colSums(as.data.frame(wide_bin[, cols, drop = FALSE])) > 0]
+  if (length(keep)) {
+    up_df <- as.data.frame(wide_bin[, keep, drop = FALSE])
+    for (nm in names(up_df)) up_df[[nm]] <- as.integer(up_df[[nm]] != 0)
+    upset_data <- up_df
+  }
+  
+  # Supplemental bars across thresholds
+  thresholds <- seq(0.5, 1.0, by = 0.1)
+  supp_df <- lapply(thresholds, function(t) {
+    long_df |>
+      summarise(count = sum(probability >= t, na.rm = TRUE), .by = bioactivity) |>
+      mutate(threshold = sprintf("%.2f", t))
+  }) |>
+    dplyr::bind_rows() |>
+    mutate(threshold = factor(threshold, levels = sprintf("%.2f", thresholds)))
+  
+  p_supp <- ggplot(supp_df, aes(bioactivity, count)) +
+    geom_col() +
+    facet_wrap(~ threshold, ncol = 3, scales = "free_y") +
+    labs(x = "Bioactivity", y = "Peptide count",
+         title = "Non-redundant peptide counts by bioactivity across cutoffs (TOX≥0.5 removed)") +
+    theme_classic(base_size = 12) +
+    theme(axis.text.x = element_text(angle = 35, hjust = 1),
+          strip.text = element_text(face = "bold")) +
+    scale_y_continuous(expand=c(0,0))
+  
+  list(
+    bar_plot   = p_bar,
+    bar_data   = bar_main_df,
+    upset_data = upset_data,  # ready for UpSetR outside the function
+    wide_hits  = wide_bin,
+    p_supp_data = supp_df,
+    p_supp_plot = p_supp
   )
-
-phylum_bioactivity_inset <- bioactivity_phylum_plot +
-  theme(legend.position = "none",
-        axis.title.x = element_blank(),
-        axis.title.y= element_blank(),
-        plot.title = element_blank())
-
-# inset the phylum plot within BGC counts
-bioactivity_with_inset <- ggdraw() +
-  draw_plot(bioactivity_summary_plot) +
-  draw_plot(phylum_bioactivity_inset, x = 0.33, y = 0.32, width = 0.65, height = 0.55)
-
-ggsave("figures/genome-bioactivity-summary-plot.png", bioactivity_with_inset, width=10, height=11, units=c("in"))
-
-# proteomics bioactivity results
-
-library(stringr)
-
-proteomics_bioactivity_summary_plot <- filtered_proteomics_bioactivity_results %>% 
-  filter(fermented_food != "donkey_milk") %>% 
-  mutate(color_group = ifelse(bioactivity %in% select_bioactivities, bioactivity, "Other")) %>%
-  select(fermented_food, color_group) %>% 
-  group_by(fermented_food, color_group) %>% 
-  summarise(count = n(), .groups="drop") %>%
-  ggplot(aes(x = fermented_food, y = count, fill = color_group)) +
-  geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(
-    values = custom_colors,
-    breaks = legend_breaks,
-    labels = bioact_labels[legend_breaks],
-    name   = "Bioactivity"
-  ) +
-  scale_y_continuous(
-    expand = c(0, 0),
-    labels = scales::comma,
-    breaks = seq(0, 80000, by = 25000)
-  ) +
-  labs(
-    x = "Fermented Food",
-    y = "Peptide Count",
-    title = "Highlighted Bioactivities in Fermented Foods\nfrom Proteomics Experiments"
-  ) +
-  # clean underscores and wrap words onto new lines
-  scale_x_discrete(labels = function(x) {
-    x %>%
-      str_replace_all("_", " ") %>%   # replace underscores with spaces
-      str_to_title() %>%              # capitalize
-      str_replace_all(" ", "\n")      # force newlines at spaces
-  }) +
-  theme_classic(base_size = 12) +
-  theme(
-    plot.title   = element_text(size = 16, face = "bold"),
-    axis.title   = element_text(size = 14, face = "bold"),
-    axis.text.x  = element_text(size = 13, lineheight = 0.9), # improve readability
-    panel.grid   = element_blank(),
-    legend.position      = c(0.6, 0.75),
-    legend.justification = c("left", "top"),
-    legend.background    = element_rect(fill = scales::alpha("white", 0.85), color = NA)
-  ) +
-  guides(fill = guide_legend(ncol = 1, byrow = TRUE))
+}
 
 
-proteomics_bioactivity_summary_plot
+# run results for the representative peptides dataframe - using main default probability threshold of 0.75, and for supplemental figures at thresholds ranging from 0.5 to 1.0 and .10 increments
 
-ggsave("figures/genomes-bioactivity-summary-plot.png", bioactivity_summary_plot, width=8, height=6, units=c("in"))
-ggsave("figures/proteomics-bioactivity-summary-plot.png", proteomics_bioactivity_summary_plot, width=8, height=6, units=c("in"))
+# representative peptides from genomes dataset
+long_nr_genomes <- prep_nr_long(rep_genome_bioactivity_results) 
+genomes_peptides_results <- plot_bioactivity_suite(long_nr_genomes, main_thr = 0.90)
+genomes_peptides_results[["bar_plot"]]
+genomes_peptides_results[["p_supp_plot"]]
+
+# upset plot
+keep_sets <- colnames(genomes_peptides_results$upset_data)[
+  colSums(genomes_peptides_results$upset_data) > 1500
+]
+
+# run UpSetR only on those
+UpSetR::upset(
+  genomes_peptides_results$upset_data,
+  sets = keep_sets,
+  order.by = "freq"
+)
+
+# representative peptides from proteomics dataset
+long_nr_proteomics <- prep_nr_long(rep_proteomics_bioactivity_results)
+proteomics_peptides_results <- plot_bioactivity_suite(long_nr_proteomics, main_thr=0.90)
+
+proteomics_peptides_results[["bar_plot"]]
+# upset plot
+keep_sets <- colnames(proteomics_peptides_results$upset_data)[
+  colSums(proteomics_peptides_results$upset_data) > 85
+]
+
+UpSetR::upset(
+  proteomics_peptides_results$upset_data,
+  sets = keep_sets,
+  order.by = "freq"
+)
+
+######################### 
+# peptide BLAST results
+# analyze peptides with a BLAST hit to FermFooDB/Peptipedia, how many times it's detected in the entire dataset
+######################### 
+
+representative_genome_seqs_blast_results <- genome_bioactivity_results %>% 
+  filter(peptide_id %in% genomes_representative_cluster_ids) %>% 
+  filter(!is.na(sseqid)) %>% 
+  mutate(peptipedia_id = sseqid) %>% 
+  select(peptide_id, sequence, peptipedia_id, full_sseq, pident, length, qlen, slen, mismatch, gapopen, qstart, qend, sstart, send, evalue, bitscore) %>% 
+  left_join(peptipedia_metadata, by = "peptipedia_id")
+
+representative_proteomics_seqs_blast_results <- proteomics_bioactivity_results %>% 
+  filter(peptide_id %in% proteomics_representative_cluster_ids) %>% 
+  filter(!is.na(sseqid)) %>% 
+  mutate(peptipedia_id = sseqid) %>% 
+  select(peptide_id, sequence, peptipedia_id, full_sseq, pident, length, qlen, slen, mismatch, gapopen, qstart, qend, sstart, send, evalue, bitscore) %>% 
+  left_join(peptipedia_metadata, by="peptipedia_id")
+  
+
