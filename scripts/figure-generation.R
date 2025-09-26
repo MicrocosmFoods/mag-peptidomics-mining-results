@@ -555,7 +555,7 @@ plot_bioactivity_suite <- function(long_df,
                                    save = TRUE) {
   dir.create(save_dir, showWarnings = FALSE, recursive = TRUE)
   
-  # Main bar
+  # Main bar plot
   bar_main_df <- long_df |>
     summarise(count = sum(probability >= main_thr, na.rm = TRUE), .by = bioactivity) |>
     arrange(desc(count)) |>
@@ -572,7 +572,7 @@ plot_bioactivity_suite <- function(long_df,
   if (save) ggsave(file.path(save_dir, "nrpeptides_main_bar_p075.png"), p_bar,
                    width = 8, height = 5, units = "in", dpi = 300)
   
-  # Prep UpSet data only (no plotting here)
+  # Prep UpSet data
   upset_data <- NULL
   wide_bin <- long_df |>
     mutate(hit = as.integer(probability >= main_thr)) |>
@@ -630,22 +630,27 @@ genomes_bioactivity_supp_plot <- genomes_peptides_results[["p_supp_plot"]]
 up_df <- genomes_peptides_results$upset_data
 
 keep_sets <- colnames(up_df)[
-  colSums(up_df) > 1500
+  colSums(up_df) > 5000
 ]
 
 genome_upset_plot <- ggplotify::as.grob(
-  UpSetR::upset(up_df[, keep_sets, drop = FALSE],
-                  sets = keep_sets,
-                  order.by = "freq",
-                  nintersects = 40)
+  UpSetR::upset(
+    up_df[, keep_sets, drop = FALSE],
+    sets = keep_sets,
+    order.by = "freq",
+    nintersects = 20,
+    text.scale = 1.5 
+  )
 )
 
 # bar plot
 genome_bar_plot <- genomes_peptides_results$bar_plot +
   ggplot2::theme(
     plot.margin = margin(0, 0, 0, 0),
-    axis.text.x = element_text(size = 10, angle = 35, hjust = 1),
-    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 16, angle = 35, hjust = 1),
+    axis.text.y = element_text(size = 16),
+    axis.title.y = element_text(size=16),
+    axis.title.x = element_text(size=16),
     panel.grid = element_blank()
   ) +
   labs(title = NULL)
@@ -667,23 +672,26 @@ proteomics_bioactivity_supp_plot <- proteomics_peptides_results[["p_supp_plot"]]
 proteomics_up_df <- proteomics_peptides_results$upset_data
 
 proteomics_keep_sets <- colnames(proteomics_up_df)[
-  colSums(proteomics_up_df) > 115
+  colSums(proteomics_up_df) > 800
 ]
 
 proteomics_upset_plot <- ggplotify::as.grob(
   UpSetR::upset(proteomics_up_df[, proteomics_keep_sets, drop = FALSE],
                 sets = proteomics_keep_sets,
                 order.by = "freq",
-                nintersects = 40,
-                mb.ratio = c(0.65, 0.35))
+                nintersects = 20,
+                mb.ratio = c(0.65, 0.35),
+                text.scale = 1.5)
 )
 
 # bar plot
 proteomics_bar_plot <- proteomics_peptides_results$bar_plot +
   ggplot2::theme(
     plot.margin = margin(2, 2, 2, 2),
-    axis.text.x = element_text(size = 10, angle = 35, hjust = 1),
-    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 16, angle = 35, hjust = 1),
+    axis.text.y = element_text(size = 16),
+    axis.title.y = element_text(size=16),
+    axis.title.x = element_text(size=16),
     panel.grid = element_blank()
   ) +
   labs(title = NULL)
@@ -721,6 +729,18 @@ bacteriocin_example_food_counts <- blast_identical_hits %>%
   left_join(genome_bioactivity_clusters_metadata_food_counts) %>%
   count(peptipedia_id, food_name, wt = n_peptides, name = "peptides")
 
+# pull for experimentally verified antimicrobial peptides the machine learning model predictions for AMP, AB
+
+amp_ml_predictions_comps <- blast_identical_hits %>% 
+  filter(antimicrobial == "TRUE") %>% 
+  select(-sequence) %>% 
+  left_join(rep_genome_bioactivity_results, by="peptide_id") %>% 
+  select(peptide_id, sequence, peptipedia_id, peptide_count, AB, AMP) %>% 
+  distinct(peptide_id, .keep_all = TRUE) %>% 
+  select(-peptide_id)
+
+write_tsv(amp_ml_predictions_comps, "results/cleaned_results/2025-09-26-amp-pos-ml-comps.tsv")
+
 # bar plot of bacteriocin-like peptides in dataset and counts in different foods
 plot_df <- bacteriocin_example_food_counts %>%
   group_by(peptipedia_id) %>%
@@ -738,13 +758,13 @@ top_bacteriocin_counts_plot <- ggplot(plot_df,
   scale_y_continuous(expand = c(0, 0)) +
   scale_fill_manual(values = cols) + 
   labs(x = "peptipedia_id", y = "Peptide count", fill = "Food") +
-  theme_classic(base_size = 16) + 
+  theme_classic(base_size = 20) + 
   theme(
     legend.position = "right",
     panel.grid = element_blank()
   )
 
-ggsave("figures/genomes_bacteriocin_counts_plot.png", top_bacteriocin_counts_plot, width=11, height=4.5, units=c("in"))
+ggsave("figures/genomes_bacteriocin_counts_plot.png", top_bacteriocin_counts_plot, width=11, height=5, units=c("in"))
 
 # proteomics BLAST results
 representative_proteomics_seqs_blast_results <- proteomics_bioactivity_results %>% 
@@ -761,6 +781,15 @@ proteomics_blast_identical_hits <- representative_proteomics_seqs_blast_results 
   filter(pident == 100) %>% 
   filter(qlen == slen) %>% 
   filter(!is.na(fermfoodb))
+
+# for inflammation positive results
+proteomics_activity_ml_comps <- proteomics_blast_identical_hits %>% 
+  filter(antiinflammatory == "TRUE" | aceinhibitors == "TRUE") %>% 
+  select(-sequence) %>% 
+  left_join(rep_proteomics_bioactivity_results, by="peptide_id") %>% 
+  select(peptide_id, sequence, peptipedia_id, antiinflammatory, ANIF, aceinhibitors, ACE, peptide_count, antihypertensive, anticancer, antimicrobial, antioxidative, cytotoxic, hormonal, immunomodulatory, metabolic, fermfoodb)
+
+write_tsv(proteomics_activity_ml_comps, "results/cleaned_results/2025-09-26-proteomics-anif-ml-comps.tsv")
 
 # proteomics high hit examples
 proteomics_example_food_counts <- proteomics_blast_identical_hits %>% 
@@ -783,7 +812,7 @@ proteomics_top_hits_plot <- ggplot(proteomics_plot_df, aes(x = fct_reorder(facto
   scale_y_continuous(expand = c(0, 0)) +
   scale_fill_brewer(palette = "Set2") + 
   labs(x = "peptipedia_id", y = "Peptide count", fill = "Food") +
-  theme_classic(base_size = 16) + 
+  theme_classic(base_size = 22) + 
   theme(
     legend.position = "right",
     panel.grid = element_blank()
