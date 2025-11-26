@@ -34,6 +34,9 @@ mag_metadata <- read_tsv(mag_metadata_url) %>%
 # fermented foods peptidomics bioactivity results
 proteomics_bioactivity_results <- read_tsv("results/2025-02-20-proteomics-bioactivity-results/ff_peptidomics_peptides_metadata.tsv")
 
+# genome data DIAMOND blastp results against curated peptipedia records with non-predicted bioactivities
+genome_diamond_blastp_results <- read_tsv("results/2025-04-24-mag-results/2025-11-25-updated-diamond-blastp-peptipedia-blastp-results.tsv")
+
 # representative clusters TSV clustered @ 100% identity for genomes peptides results
 genomes_peptides_100id_clusters <- read_tsv("raw_data/2025-04-23-combined-batch-results/clusters100/clusters.tsv", col_names = c("cluster_id", "peptide_id"))
 
@@ -48,11 +51,11 @@ proteomics_representative_cluster_ids <- proteomics_peptides_100id_clusters %>%
   pull(cluster_id)
 
 # peptipedia DB curated metadata
-peptipedia_metadata <- read_tsv("metadata/2025-08-11-peptipedia-validated-metadata.tsv") %>% 
-  mutate(peptipedia_id = peptide_id) %>% 
-  select(-peptide_id) %>% 
-  mutate(peptipedia_sequence = sequence) %>% 
-  select(-sequence)
+peptipedia_metadata <- read_tsv("metadata/2025-11-25-peptipedia-nonpredicted-filtered-metadata.tsv") %>%
+  select(-sequence) %>% 
+  mutate(peptipedia_id = as.double(peptide_id)) %>% 
+  select(peptipedia_id, everything()) %>% 
+  select(-peptide_id)
 
 ######################### 
 # save raw peptide results DFs for just the representative peptides
@@ -707,20 +710,21 @@ ggsave("figures/proteomics_bioactivity_supp_plot.png", proteomics_bioactivity_su
 ######################### 
 
 # genome BLAST results
-representative_genome_seqs_blast_results <- genome_bioactivity_results %>% 
+representative_genome_seqs_blast_results <- genome_diamond_blastp_results %>% 
+  mutate(peptide_id = qseqid) %>% 
+  mutate(sequence = full_sseq) %>% 
   filter(peptide_id %in% genomes_representative_cluster_ids) %>% 
   filter(!is.na(sseqid)) %>% 
   mutate(peptipedia_id = sseqid) %>% 
   select(peptide_id, sequence, peptipedia_id, full_sseq, pident, length, qlen, slen, mismatch, gapopen, qstart, qend, sstart, send, evalue, bitscore) %>% 
-  left_join(peptipedia_metadata, by = "peptipedia_id") %>% 
-  select(-peptipedia_sequence) %>% 
+  left_join(peptipedia_metadata, by="peptipedia_id") %>% 
   left_join(genome_cluster_counts)
+
 
 # get hits that are identical to the query and likely have that function
 blast_identical_hits <- representative_genome_seqs_blast_results %>%  
   filter(pident == 100) %>% 
-  filter(qlen == slen) %>% 
-  filter(!is.na(fermfoodb))
+  filter(qlen == slen)
 
 # pull examples and counts across food types
 bacteriocin_example_food_counts <- blast_identical_hits %>% 
