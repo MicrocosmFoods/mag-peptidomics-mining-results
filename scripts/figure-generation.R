@@ -20,7 +20,7 @@ genome_molecule_counts <- read_tsv("results/2025-04-24-mag-results/all_molecule_
 genome_antismash_summary <- read_tsv("results/2025-04-24-mag-results/antismash_summary.tsv")
 
 # genome bioactivity results
-genome_bioactivity_results <- read_tsv("results/2025-04-24-mag-results/2025-04-24-mag-bioactivity-all-peptides-predictions.tsv")
+genome_bioactivity_results <- read_tsv("results/2025-04-24-mag-results/2026-02-23-updated-merged-genome-peptide-results.tsv")
 
 # mag metadata
 mag_metadata_url <- "https://raw.githubusercontent.com/MicrocosmFoods/fermentedfood_metadata_curation/refs/heads/main/data/2025-05-21-genome-metadata-food-taxonomy.tsv"
@@ -32,10 +32,7 @@ mag_metadata <- read_tsv(mag_metadata_url) %>%
   select(genome_name, everything())
 
 # fermented foods peptidomics bioactivity results
-proteomics_bioactivity_results <- read_tsv("results/2025-02-20-proteomics-bioactivity-results/ff_peptidomics_peptides_metadata.tsv")
-
-# genome data DIAMOND blastp results against curated peptipedia records with non-predicted bioactivities
-genome_diamond_blastp_results <- read_tsv("results/2025-04-24-mag-results/2025-11-25-updated-diamond-blastp-peptipedia-blastp-results.tsv")
+proteomics_bioactivity_results <- read_tsv("results/2025-02-20-proteomics-bioactivity-results/2026-02-23-merged-proteomics-peptide-results.tsv")
 
 # representative clusters TSV clustered @ 100% identity for genomes peptides results
 genomes_peptides_100id_clusters <- read_tsv("raw_data/2025-04-23-combined-batch-results/clusters100/clusters.tsv", col_names = c("cluster_id", "peptide_id"))
@@ -51,11 +48,10 @@ proteomics_representative_cluster_ids <- proteomics_peptides_100id_clusters %>%
   pull(cluster_id)
 
 # peptipedia DB curated metadata
-peptipedia_metadata <- read_tsv("metadata/2025-11-25-peptipedia-nonpredicted-filtered-metadata.tsv") %>%
-  select(-sequence) %>% 
-  mutate(peptipedia_id = as.double(peptide_id)) %>% 
+peptipedia_metadata <- read_tsv("metadata/2026-02-23-cleaned-peptipedia-nonpredicted-records-metadata.tsv") %>%
+  mutate(peptipedia_id = as.double(id_peptide)) %>% 
   select(peptipedia_id, everything()) %>% 
-  select(-peptide_id)
+  select(-id_peptide)
 
 ######################### 
 # save raw peptide results DFs for just the representative peptides
@@ -68,7 +64,7 @@ rep_genome_bioactivity_results <- genome_bioactivity_results %>%
   select(peptide_id, sequence, ends_with("_1")) %>% 
   rename_with(~str_remove(., "_1"), ends_with("_1"))
 
-write_tsv(rep_genome_bioactivity_results, "results/representative_seqs_results/2025-09-08-representative-genome-peptide-seqs-bioactivity-results.tsv")
+write_tsv(rep_genome_bioactivity_results, "results/representative_seqs_results/2026-02-23-representative-genome-peptide-seqs-bioactivity-results.tsv")
 
 # metadata df to join with clusters
 genome_bioactivity_clusters_metadata <- genome_bioactivity_results %>% 
@@ -96,7 +92,7 @@ rep_proteomics_bioactivity_results <- proteomics_bioactivity_results %>%
   select(peptide_id, sequence, ends_with("_1")) %>% 
   rename_with(~str_remove(., "_1"), ends_with("_1"))
 
-write_tsv(rep_proteomics_bioactivity_results, "results/representative_seqs_results/2025-09-08-representative-proteomics-peptide-seqs-bioactivity-results.tsv")
+write_tsv(rep_proteomics_bioactivity_results, "results/representative_seqs_results/2026-02-23-representative-proteomics-peptide-seqs-bioactivity-results.tsv")
 
 # join clusters counts with fermented food sample types
 proteomics_bioactivity_clusters_metadata <- proteomics_bioactivity_results %>% 
@@ -553,7 +549,7 @@ prep_nr_long <- function(df = rep_genome_bioactivity_results,
 # create supplementary bar plot figure at different thresholds 0.5 > 1 at 0.10 intervals
 plot_bioactivity_suite <- function(long_df,
                                    id_col = "peptide_id",
-                                   main_thr = 0.75,
+                                   main_thr = 0.9,
                                    save_dir = "figures",
                                    save = TRUE) {
   dir.create(save_dir, showWarnings = FALSE, recursive = TRUE)
@@ -572,7 +568,7 @@ plot_bioactivity_suite <- function(long_df,
     theme(axis.text.x = element_text(angle = 35, hjust = 1)) +
     scale_y_continuous(expand=c(0,0))
   
-  if (save) ggsave(file.path(save_dir, "nrpeptides_main_bar_p075.png"), p_bar,
+  if (save) ggsave(file.path(save_dir, "nrpeptides_main_bar_p090.png"), p_bar,
                    width = 8, height = 5, units = "in", dpi = 300)
   
   # Prep UpSet data
@@ -622,7 +618,7 @@ plot_bioactivity_suite <- function(long_df,
 }
 
 
-# run results for the representative peptides dataframe - using main default probability threshold of 0.75, and for supplemental figures at thresholds ranging from 0.5 to 1.0 and .10 increments
+# run results for the representative peptides dataframe - using main default probability threshold of 0.90, and for supplemental figures at thresholds ranging from 0.5 to 1.0 and .10 increments
 
 # representative peptides from genomes dataset
 long_nr_genomes <- prep_nr_long(rep_genome_bioactivity_results) 
@@ -661,7 +657,7 @@ genome_bar_plot <- genomes_peptides_results$bar_plot +
 # save figures separately
 ggsave("figures/genome_peptides_category_counts.png", genome_bar_plot, width=10, height=8, units=c("in"))
 ggsave("figures/genome_peptides_intersections.png", genome_upset_plot, width=10, height=8, units=c("in"))
-ggsave("figures/genome_bioactivity_supp_plot.png", genomes_bioactivity_supp_plot, width=10, height=8, units=c("in"))
+ggsave("figures/genome_bioactivity_supp_plot.png", genomes_bioactivity_supp_plot, width=15, height=8, units=c("in"))
 
 
 # representative peptides from proteomics dataset
@@ -702,16 +698,17 @@ proteomics_bar_plot <- proteomics_peptides_results$bar_plot +
 # save plots separately
 ggsave("figures/proteomics_peptides_category_counts.png", proteomics_bar_plot, width=10, height=8, units=c("in"))
 ggsave("figures/proteomics_peptides_intersections.png", proteomics_upset_plot, width=10, height=8, units=c("in"))
-ggsave("figures/proteomics_bioactivity_supp_plot.png", proteomics_bioactivity_supp_plot, width=10, height=8, units=c("in"))
+ggsave("figures/proteomics_bioactivity_supp_plot.png", proteomics_bioactivity_supp_plot, width=15, height=8, units=c("in"))
 
 ######################### 
 # peptide BLAST results
 # analyze peptides with a BLAST hit to FermFooDB/Peptipedia, how many times it's detected in the entire dataset
 ######################### 
+genome_diamond_blastp_results <- genome_bioactivity_results %>% 
+  select(peptide_id, sseqid, full_sseq, pident, length, qlen, slen, mismatch, gapopen, qstart, qend, sstart, send, evalue, bitscore)
 
 # genome BLAST results
 representative_genome_seqs_blast_results <- genome_diamond_blastp_results %>% 
-  mutate(peptide_id = qseqid) %>% 
   mutate(sequence = full_sseq) %>% 
   filter(peptide_id %in% genomes_representative_cluster_ids) %>% 
   filter(!is.na(sseqid)) %>% 
@@ -736,7 +733,7 @@ bacteriocin_example_food_counts <- blast_identical_hits %>%
 # pull for experimentally verified antimicrobial peptides the machine learning model predictions for AMP, AB
 
 amp_ml_predictions_comps <- blast_identical_hits %>% 
-  filter(antimicrobial == "TRUE") %>% 
+  filter(Antimicrobial == "TRUE") %>% 
   select(-sequence) %>% 
   left_join(rep_genome_bioactivity_results, by="peptide_id") %>% 
   select(peptide_id, sequence, peptipedia_id, peptide_count, AB, AMP) %>% 
@@ -777,21 +774,21 @@ representative_proteomics_seqs_blast_results <- proteomics_bioactivity_results %
   mutate(peptipedia_id = sseqid) %>% 
   select(peptide_id, sequence, peptipedia_id, full_sseq, pident, length, qlen, slen, mismatch, gapopen, qstart, qend, sstart, send, evalue, bitscore) %>% 
   left_join(peptipedia_metadata, by="peptipedia_id") %>% 
-  select(-peptipedia_sequence) %>% 
   left_join(proteomics_clusters_counts)
   
 # get identical hits
 proteomics_blast_identical_hits <- representative_proteomics_seqs_blast_results %>%  
   filter(pident == 100) %>% 
-  filter(qlen == slen) %>% 
-  filter(!is.na(fermfoodb))
+  filter(qlen == slen)
 
 # for inflammation positive results
 proteomics_activity_ml_comps <- proteomics_blast_identical_hits %>% 
-  filter(antiinflammatory == "TRUE" | aceinhibitors == "TRUE") %>% 
+  filter(`Anti inflamatory` == TRUE | `Angiotensin-converting enzyme (ace) inhibitors` == TRUE) %>%
   select(-sequence) %>% 
   left_join(rep_proteomics_bioactivity_results, by="peptide_id") %>% 
-  select(peptide_id, sequence, peptipedia_id, antiinflammatory, ANIF, aceinhibitors, ACE, peptide_count, antihypertensive, anticancer, antimicrobial, antioxidative, cytotoxic, hormonal, immunomodulatory, metabolic, fermfoodb)
+  select(peptide_id, sequence, peptipedia_id, peptide_count, ANIF, ACE) %>% 
+  distinct(peptide_id, .keep_all = TRUE) %>% 
+  select(-peptide_id)
 
 write_tsv(proteomics_activity_ml_comps, "results/cleaned_results/2025-09-26-proteomics-anif-ml-comps.tsv")
 
