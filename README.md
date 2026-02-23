@@ -1,6 +1,6 @@
 # Summarzing Mining and Bioactivity Results from Publicly Available Fermented Foods Genomes and Peptidomics Data
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.16749254.svg)](https://doi.org/10.5281/zenodo.16749254)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18750850.svg)](https://doi.org/10.5281/zenodo.18750850)
 
 This repository contains scripts and notebooks for analyzing data produced by the [bac-mining workflow](https://github.com/MicrocosmFoods/bac-minining) and [peptide-bioactivity-prediction workflow ](https://github.com/MicrocosmFoods/peptide-bioactivity-prediction) for the following datasets: 
 
