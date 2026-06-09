@@ -10,6 +10,10 @@ This repository contains scripts and notebooks for analyzing data produced by th
 
 The [fermentedfood_mags_curation](https://github.com/MicrocosmFoods/fermentedfood_mags_curation) repository documents how all of the MAG and BacDive isolate genome data were collected and processed.
 
+This work is published in the bioRxiv preprint [Leveraging publicly available datasets and machine learning approaches for predicting the health benefits of fermented foods](https://www.biorxiv.org/content/10.64898/2026.03.05.709865v1.full) where we use characterize the bioactive potential of fermented-food associated microbes and substrates through mining BGCs, peptides, proteomics datasets, and using machine learning classification models to predict the bioactivity of peptide sequences.
+
+![overview](figures/combo_diagram_full.png)
+
 ## Repository Structure
 
 This repository is setup so that all processed results from the workflows are in `results`, they are analyzed and viewed within the notebooks in the `notebooks` directory, which call functions from the `scripts/mag-mining-notebook-functions.R` script. The subdirectory structure is as follows: 
@@ -26,9 +30,3 @@ scripts/ - Scripts for notebook functions, figure generation, parsing and combin
 ## Results
 
 Raw files including FASTA sequences, machine learning models, and peptides results for all three data sources are [available on Zenodo](https://zenodo.org/records/16749254).
-
-## Preprint
-This work is published in the bioRxiv preprint [Leveraging publicly available datasets and machine learning approaches for predicting the health benefits of fermented foods](https://www.biorxiv.org/content/10.64898/2026.03.05.709865v1.full) where we use characterize the bioactive potential of fermented-food associated microbes and substrates through mining BGCs, peptides, proteomics datasets, and using machine learning classification models to predict the bioactivity of peptide sequences.
-
-![overview](figures/combo_diagram_full.png)
-
